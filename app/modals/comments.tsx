@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../firebaseConfig";
 
 export default function CommentsModal() {
@@ -234,56 +235,55 @@ export default function CommentsModal() {
 
   return (
     <Modal animationType="slide" visible onRequestClose={() => router.back()}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name="chatbubbles-outline" size={22} color="#fff" />
-            <Text style={styles.headerTitle}>Comments</Text>
-          </View>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="close" size={26} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {replyTo && (
-          <View style={styles.replyingTo}>
-            <Text style={styles.replyingText}>
-              Replying to <Text style={{ fontWeight: "bold" }}>{replyTo.userName}</Text>
-            </Text>
-            <TouchableOpacity onPress={() => setReplyTo(null)}>
-              <Ionicons name="close-circle" size={20} color="#E53935" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }} edges={["top"]}>
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Ionicons name="chatbubbles-outline" size={22} color="#fff" />
+              <Text style={styles.headerTitle}>Comments</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="close" size={26} color="#fff" />
             </TouchableOpacity>
           </View>
-        )}
 
-        <FlatList
-          data={comments.filter((c) => c.parentId === null)}
-          keyExtractor={(item) => item.id}
-          renderItem={renderComment}
-          contentContainerStyle={{ paddingBottom: 80 }}
-        />
+          {replyTo && (
+            <View style={styles.replyingTo}>
+              <Text style={styles.replyingText}>
+                Replying to <Text style={{ fontWeight: "bold" }}>{replyTo.userName}</Text>
+              </Text>
+              <TouchableOpacity onPress={() => setReplyTo(null)}>
+                <Ionicons name="close-circle" size={20} color="#E53935" />
+              </TouchableOpacity>
+            </View>
+          )}
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="Write a comment..."
-            placeholderTextColor="#777"
-            value={newComment}
-            onChangeText={setNewComment}
+          <FlatList
+            data={comments.filter((c) => c.parentId === null)}
+            keyExtractor={(item) => item.id}
+            renderItem={renderComment}
+            contentContainerStyle={{ paddingBottom: 80 }}
           />
-          <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              !newComment.trim() && { opacity: 0.6 },
-            ]}
-            onPress={handleSend}
-            disabled={!newComment.trim()}
-          >
-            <Ionicons name="send" size={20} color="#fff" />
-          </TouchableOpacity>
+
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Write a comment..."
+              placeholderTextColor="#777"
+              value={newComment}
+              onChangeText={setNewComment}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, !newComment.trim() && { opacity: 0.6 }]}
+              onPress={handleSend}
+              disabled={!newComment.trim()}
+            >
+              <Ionicons name="send" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -299,6 +299,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     elevation: 4,
+    marginBottom: 10,
   },
   headerTitle: {
     fontSize: 20,

@@ -201,7 +201,7 @@ export default function SearchUsers() {
               searchType === "products" && styles.toggleTextActive,
             ]}
           >
-            Products
+            Posts
           </Text>
         </TouchableOpacity>
       </View>
@@ -234,7 +234,7 @@ export default function SearchUsers() {
       {/* Search Bar */}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color="#1E88E5" />
+          <Ionicons name="search" size={20} color="#43A047" />
           <TextInput
             style={styles.input}
             placeholder={`Search ${searchType}...`}
@@ -245,7 +245,7 @@ export default function SearchUsers() {
         </View>
       </View>
 
-      {loading && <ActivityIndicator size="large" color="#1E88E5" style={{ marginTop: 20 }} />}
+      {loading && <ActivityIndicator size="large" color="#43A047" style={{ marginTop: 20 }} />}
 
       {/* Results */}
       <FlatList
@@ -334,10 +334,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     backgroundColor: "#e6e6e6",
+    borderBottomWidth: 2,
+    borderColor: "#43A047",
   },
   toggleButton: { flex: 1, alignItems: "center", paddingVertical: 10 },
   toggleActive: { backgroundColor: "#4A8C2A" },
-  toggleText: { fontSize: 16, color: "#000" },
+  toggleText: { fontSize: 16, color: "#43A047" },
   toggleTextActive: { color: "#fff", fontWeight: "bold" },
   filterRow: {
     flexDirection: "row",
@@ -395,6 +397,6 @@ const styles = StyleSheet.create({
   avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 10 },
   productImage: { width: 70, height: 70, borderRadius: 8, marginRight: 10 },
   name: { fontSize: 16, fontWeight: "600", color: "#333" },
-  role: { color: "#1E88E5", fontSize: 14 },
-  emptyText: { textAlign: "center", color: "#777", marginTop: 30 },
+  role: { color: "#777", fontSize: 14 },
+  emptyText: { textAlign: "center", color: "#000", marginTop: 30 },
 });

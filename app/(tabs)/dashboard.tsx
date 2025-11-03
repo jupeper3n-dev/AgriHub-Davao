@@ -405,7 +405,7 @@ export default function DashboardScreen() {
               <Ionicons
                 name={liked ? "heart" : "heart-outline"}
                 size={22}
-                color={liked ? "#E91E63" : "#000"}
+                color={liked ? "#43A047" : "#43A047"}
                 style={styles.iconShadow}
               />
               <Text style={styles.iconLabel}>{item.likes?.length || 0}</Text>
@@ -420,7 +420,7 @@ export default function DashboardScreen() {
               <Ionicons
                 name="chatbubble-outline"
                 size={22}
-                color="#000"
+                color="#43A047"
                 style={styles.iconShadow}
               />
               <Text style={styles.iconLabel}>Comment</Text>
@@ -435,7 +435,7 @@ export default function DashboardScreen() {
               <Ionicons
                 name="send-outline"
                 size={22}
-                color="#000"
+                color="#43A047"
                 style={styles.iconShadow}
               />
               <Text style={styles.iconLabel}>Chat</Text>
@@ -511,7 +511,7 @@ export default function DashboardScreen() {
           renderItem={renderPost}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={<Text style={styles.empty}>No posts available.</Text>}
-          contentContainerStyle={{ paddingBottom: 50 }}
+          contentContainerStyle={{ paddingBottom: 60 + insets.bottom, }}
         />
       </View>
 
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  detailsText: { color: "#000", fontWeight: "bold" },
+  detailsText: { color: "#43A047", fontWeight: "bold" },
   empty: { textAlign: "center", color: "#999", marginTop: 40 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   addButtonContainer: {

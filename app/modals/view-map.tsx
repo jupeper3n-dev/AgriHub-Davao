@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     borderColor: "#43A047",
     borderWidth: 1,
   },
-  closeText: { color: "#fff", fontWeight: "bold" },
+  closeText: { color: "#43A047", fontWeight: "bold" },
   loading: { textAlign: "center", color: "#888", marginVertical: 10 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   infoBox: {

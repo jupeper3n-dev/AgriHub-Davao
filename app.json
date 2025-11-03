@@ -27,7 +27,9 @@
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
-        "CAMERA"
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
       ],
       "config": {
         "googleMaps": {
@@ -52,8 +54,7 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "react-native-permissions"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -70,8 +71,9 @@
         "databaseURL": "https://manota-f9acc-default-rtdb.firebaseio.com/"
       },
       "eas": {
-        "projectId": "b593a07f-9c26-44af-8ae6-70882f1b8fef"
+        "projectId": "da9ba293-398b-418c-84ee-122543902ae9"
       }
-    }
+    },
+    "owner": "kriankun"
   }
 }

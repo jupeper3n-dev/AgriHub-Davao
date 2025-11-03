@@ -26,13 +26,13 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../firebaseConfig";
 
   const SaveButton = ({ isSaved, onPress }: { isSaved: boolean; onPress: () => void }) => {
@@ -858,7 +858,7 @@ export default function ProfileView() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  container: { flex: 1, backgroundColor: "#fff", paddingLeft: 16},
   backBtn: {   flexDirection: "row",
   alignItems: "center",
   marginBottom: 10,},
@@ -902,18 +902,20 @@ const styles = StyleSheet.create({
   metaLine: { color: "#444", marginTop: 6 },
 
   followBtn: {
-    backgroundColor: "#1E88E5",
+    backgroundColor: "#43A047",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   followText: { color: "#fff", fontWeight: "bold" },
   msgBtn: {
-    backgroundColor: "#f1f1f1",
+    backgroundColor: "#ffffff",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginLeft: 10,
+    borderWidth: 1,
+    borderColor: "#43A047"
   },
   reportBtn: {
   backgroundColor: "#E53935",
@@ -926,7 +928,7 @@ const styles = StyleSheet.create({
   color: "#fff",
   fontWeight: "bold",
   },
-  msgText: { color: "#1E88E5", fontWeight: "600" },
+  msgText: { color: "#43A047", fontWeight: "600" },
   actionRow: { flexDirection: "row", marginTop: 10 },
 
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 20 },
