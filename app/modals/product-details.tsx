@@ -31,7 +31,7 @@ export default function ProductDetailsModal() {
       <View style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>📦 Product Details</Text>
+          <Text style={styles.headerTitle}>Product Details</Text>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.closeBtn}>✖</Text>
           </TouchableOpacity>
@@ -66,7 +66,7 @@ export default function ProductDetailsModal() {
           <Text style={styles.sectionTitle}>📍 Store Location</Text>
           <Text style={styles.text}>{locationName || "No location provided."}</Text>
 
-          {/* ✅ Replaced old <MapView> with See Location button */}
+          {/* Replaced old <MapView> with See Location button */}
           {lat && lng && (
             <TouchableOpacity
               style={styles.mapBtn}

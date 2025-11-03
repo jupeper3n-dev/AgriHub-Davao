@@ -1,13 +1,15 @@
 {
   "expo": {
-    "name": "geo-davao",
-    "slug": "geo-davao",
+    "name": "AgriHubDavao",
+    "slug": "agrihub-davao",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "geodavao",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/agrihub-davao-logo.png",
+    "scheme": "AgriHubDavao",
+    "userInterfaceStyle": "light",
+
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true
     },
@@ -17,9 +19,23 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+      }, 
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.deive03.agrihubdavao",
+      "windowSoftInputMode": "adjustResize",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "CAMERA"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD7qx0WjaWjvtt3XMaBoN_zAx4y80Dnrhg"
+        }
+      }
     },
     "web": {
       "output": "static",
@@ -43,6 +59,21 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "firebase": {
+        "apiKey": "AIzaSyCCfQx8Ru9AgZCcJKeSUlGoxM8Y74ApLKg",
+        "authDomain": "manota-f9acc.firebaseapp.com",
+        "projectId": "manota-f9acc",
+        "storageBucket": "manota-f9acc.firebasestorage.app",
+        "messagingSenderId": "44603281991",
+        "appId": "1:44603281991:web:dc52f67beaaaff11c59762",
+        "databaseURL": "https://manota-f9acc-default-rtdb.firebaseio.com/"
+      },
+      "eas": {
+        "projectId": "b593a07f-9c26-44af-8ae6-70882f1b8fef"
+      }
     }
+    
   }
 }

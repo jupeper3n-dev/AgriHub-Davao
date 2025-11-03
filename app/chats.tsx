@@ -5,18 +5,16 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
-  where,
+  where
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
-  Platform,
   RefreshControl,
   SafeAreaView,
   StatusBar,
@@ -24,9 +22,26 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
+const formatTime = (timestamp: any): string => {
+  if (!timestamp) return "";
+  const date: Date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diff = (now.getTime() - date.getTime()) / 1000;
+
+  if (diff < 60) return "Just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function Chats() {
   const router = useRouter();
@@ -38,22 +53,24 @@ export default function Chats() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // ✅ Listen to all chats of the current user
+  // Listen to all chats of the current user
   useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
     if (!user) return;
     const q = query(
       collection(db, "chats"),
-      where("members", "array-contains", user.uid),
-      orderBy("updatedAt", "desc")
+      where("members", "array-contains", user.uid)
     );
 
-    // 🔥 Keep track of all chat user snapshot unsubscribers
+    // Keep track of all chat user snapshot unsubscribers
     const userListeners: (() => void)[] = [];
 
     const unsub = onSnapshot(
       q,
       async (snap) => {
         const list: any[] = [];
+
         for (const docSnap of snap.docs) {
           const data = docSnap.data();
           const otherId = data.members.find((m: string) => m !== user.uid);
@@ -61,7 +78,7 @@ export default function Chats() {
 
           const userRef = doc(db, "users", otherId);
 
-          // 👇 Add user listener and store its unsubscribe function
+          // Add user listener and store its unsubscribe function
           const userUnsub = onSnapshot(userRef, (userSnap) => {
             if (userSnap.exists()) {
               const otherData = userSnap.data();
@@ -70,21 +87,36 @@ export default function Chats() {
                 ...data,
                 otherUser: otherData,
               };
+
               setChats((prev) => {
                 const existingIndex = prev.findIndex((c) => c.id === docSnap.id);
+                let newList;
                 if (existingIndex >= 0) {
-                  const newList = [...prev];
+                  newList = [...prev];
                   newList[existingIndex] = updatedChat;
-                  return newList;
                 } else {
-                  return [...prev, updatedChat];
+                  newList = [...prev, updatedChat];
                 }
+
+                // Sort chats by latest message timestamp
+                return newList.sort((a, b) => {
+                  const timeA =
+                    a.updatedAt?.toMillis?.() ||
+                    a.lastMessageAt?.toMillis?.() ||
+                    0;
+                  const timeB =
+                    b.updatedAt?.toMillis?.() ||
+                    b.lastMessageAt?.toMillis?.() ||
+                    0;
+                  return timeB - timeA;
+                });
               });
             }
           });
 
           userListeners.push(userUnsub);
         }
+
         setLoading(false);
       },
       (error) => {
@@ -93,20 +125,20 @@ export default function Chats() {
       }
     );
 
-    // ✅ Clean up both main and per-user listeners on unmount or logout
+    // Cleanup all listeners when component unmounts
     return () => {
       unsub();
       userListeners.forEach((fn) => fn());
     };
   }, [user]);
 
-  // ✅ Pull to refresh
+  // Pull to refresh
   const onRefresh = async () => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   };
 
-  // ✅ Search only users you follow
+  // Search only users you follow
   const handleSearch = async (text: string) => {
     setSearchText(text);
     if (!text.trim() || !user) {
@@ -150,7 +182,7 @@ export default function Chats() {
     setSearching(false);
   };
 
-  // ✅ Start or open chat with selected user
+  // Start or open chat with selected user
   const openChat = async (otherUser: any) => {
     if (!user) return;
 
@@ -176,7 +208,7 @@ export default function Chats() {
     router.push({ pathname: "/chat-room", params: { chatId, uid: them } });
   };
 
-  // ⏰ Format last seen
+  // Format last seen
   const getLastSeenText = (timestamp: any) => {
     if (!timestamp) return "Offline";
     const diff = Date.now() - timestamp.toDate().getTime();
@@ -201,13 +233,13 @@ export default function Chats() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar backgroundColor="#1E88E5" barStyle="light-content" />
 
-      {/* 🟦 Sticky Header */}
+      {/* Sticky Header */}
       <View style={styles.headerBar}>
         <Text style={styles.headerText}>Messages</Text>
       </View>
 
       <View style={styles.container}>
-        {/* 🔍 Search bar */}
+        {/* Search bar */}
         <TextInput
           placeholder="Search users..."
           placeholderTextColor="#777"
@@ -256,7 +288,7 @@ export default function Chats() {
                 item.lastMessageStatus !== "read";
               const other = item.otherUser;
 
-              // ✅ Status text logic
+              // Status text logic
               let statusLine = "";
               if (item.lastSenderId === user?.uid) {
                 if (item.lastMessageStatus === "read") statusLine = "Read";
@@ -267,7 +299,7 @@ export default function Chats() {
                 statusLine = "Sent you a new message";
               }
 
-              // 🟢 Top presence text
+              // Top presence text
               const presenceText = other?.isOnline
                 ? "Online"
                 : `Active ${getLastSeenText(other?.lastSeen)}`;
@@ -285,7 +317,7 @@ export default function Chats() {
                     })
                   }
                 >
-                  {/* 🖼 Avatar + Online Indicator */}
+                  {/* Avatar + Online Indicator */}
                   <View style={styles.avatarContainer}>
                     <Image
                       source={{
@@ -299,13 +331,25 @@ export default function Chats() {
                     {other?.isOnline && <View style={styles.onlineDot} />}
                   </View>
 
-                  {/* 💬 Chat Info */}
+                  {/* Chat Info */}
                   <View style={styles.chatInfo}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
                       <Text style={styles.chatName}>
                         {other?.fullName || "Unknown User"}
                       </Text>
+
+                      {/* Timestamp */}
+                      <Text style={styles.chatTime}>
+                        {item.lastMessageAt ? formatTime(item.lastMessageAt) : ""}
+                      </Text>
                     </View>
+
                     <Text style={styles.presenceText}>{presenceText}</Text>
 
                     <View style={styles.messageBlock}>
@@ -330,7 +374,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#1E88E5",
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+    paddingTop: 0,
   },
   headerBar: {
     backgroundColor: "#4A8C2A",
@@ -338,8 +382,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     alignItems: "flex-start",
     justifyContent: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#1565C0",
     zIndex: 10,
     elevation: 3,
   },
@@ -418,5 +460,10 @@ const styles = StyleSheet.create({
   messageBlock: {
     flexDirection: "column",
     marginTop: 2,
+  },
+  chatTime: {
+  fontSize: 12,
+  color: "#999",
+  marginLeft: 8,
   },
 });

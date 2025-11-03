@@ -12,125 +12,245 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { AppState, Platform } from "react-native";
 import { auth, db, rtdb } from "../firebaseConfig";
 
-let appStateSubscription: { remove?: () => void } | null = null;
-let connectedUnsub: (() => void) | null = null;
-let cleanupOnExit = false;
+/* ---------------------------------------------------------
+   Helper 1: Wait until RTDB is connected
+--------------------------------------------------------- */
+async function waitForRTDBConnection() {
+  const db = getDatabase();
+  const connectedRef = ref(db, ".info/connected");
+  return new Promise<void>((resolve) => {
+    const unsub = onValue(connectedRef, (snap) => {
+      if (snap?.val() === true) {
+        if (typeof unsub === "function") unsub();
+        resolve();
+      }
+    });
+  });
+}
 
-export const setupPresence = () => {
-  // 🧹 Clean old listeners
-  if (appStateSubscription && typeof appStateSubscription.remove === "function") {
-    appStateSubscription.remove();
-    appStateSubscription = null;
+/* ---------------------------------------------------------
+   Helper 2: Safe RTDB writes (ignore stream token error)
+--------------------------------------------------------- */
+async function safeSet(refObj: any, data: any) {
+  try {
+    await set(refObj, data);
+  } catch (err: any) {
+    const msg = String(err);
+    if (msg.includes("missing stream token")) {
+      console.log("Ignored RTDB 'missing stream token' — will retry later");
+      return;
+    }
+    throw err;
   }
-  if (connectedUnsub) {
-    connectedUnsub();
-    connectedUnsub = null;
+}
+
+/* ---------------------------------------------------------
+   Helper 3: Safe unsubscribe for all listener types
+--------------------------------------------------------- */
+function safeUnsub(u?: (() => void) | { remove: () => void } | null) {
+  try {
+    if (!u) return;
+    if (typeof u === "function") {
+      u();
+    } else if (typeof (u as any).remove === "function") {
+      (u as any).remove();
+    } else {
+      console.warn("Tried to unsubscribe invalid listener:", u);
+    }
+  } catch (e) {
+    console.warn("safeUnsub failed:", e);
+  }
+}
+
+let initializedForUser: string | null = null;
+let appStateSub: any = null;
+let connectedUnsub: any = null;
+let exiting = false;
+let watchdogInterval: ReturnType<typeof setInterval> | null = null;
+
+/* ---------------------------------------------------------
+   Main Presence Setup
+--------------------------------------------------------- */
+export const setupPresence = () => {
+  console.log("setupPresence() called");
+
+  // Clean old listeners first
+  safeUnsub(appStateSub);
+  appStateSub = null;
+  safeUnsub(connectedUnsub);
+  connectedUnsub = null;
+
+  if (watchdogInterval) {
+    clearInterval(watchdogInterval);
+    watchdogInterval = null;
   }
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      console.log("User logged out — stopping presence tracking");
-
-      if (appStateSubscription && typeof appStateSubscription.remove === "function") {
-        appStateSubscription.remove();
-        appStateSubscription = null;
+      console.log("User logged out — disabling presence safely");
+      initializedForUser = null;
+      try {
+        goOffline(getDatabase());
+      } catch {
+        console.warn("RTDB already offline");
       }
-      if (connectedUnsub) connectedUnsub();
 
+      safeUnsub(connectedUnsub);
+      connectedUnsub = null;
+
+      if (watchdogInterval) {
+        clearInterval(watchdogInterval);
+        watchdogInterval = null;
+      }
+      return; // exit cleanly
+    }
+
+    // Prevent duplicate initialization
+    if (initializedForUser === user.uid) {
+      console.log("⚠️ Presence already active for", user.uid);
+      return;
+    }
+    initializedForUser = user.uid;
+
+    // Prevent invalid UID references
+    if (!user?.uid) {
+      console.warn("No valid user UID, skipping RTDB presence setup");
       return;
     }
 
-    console.log("🟢 Starting presence tracking for user:", user.uid);
+    console.log("Starting presence tracking for:", user.uid);
 
     const userRef = doc(db, "users", user.uid);
     const rtdbRef = ref(rtdb, `/status/${user.uid}`);
-
-    const isOnlineForFirestore = { isOnline: true, lastSeen: serverTimestamp() };
-    const isOfflineForFirestore = { isOnline: false, lastSeen: serverTimestamp() };
-
-    const isOnlineForRTDB = { state: "online", lastChanged: Date.now() };
-    const isOfflineForRTDB = { state: "offline", lastChanged: Date.now() };
-
     const connectedRef = ref(rtdb, ".info/connected");
 
-    // ✅ Monitor RTDB connection state
-    connectedUnsub = onValue(connectedRef, async (snap) => {
-      const connected = snap.val();
-      if (connected) {
+    const onlineFirestore = { isOnline: true, lastSeen: serverTimestamp() };
+    const offlineFirestore = { isOnline: false, lastSeen: serverTimestamp() };
+    const onlineRTDB = { state: "online", lastChanged: Date.now() };
+    const offlineRTDB = { state: "offline", lastChanged: Date.now() };
+
+    // Small delay for RTDB readiness
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    /* -----------------------------------------------------
+       RTDB Connectivity Listener
+    ----------------------------------------------------- */
+    connectedUnsub = onValue(connectedRef, async (snap: any) => {
+      const connected = snap?.val();
+      console.log("RTDB .info/connected:", connected);
+
+      if (!connected) {
+        console.log("RTDB disconnected — fallback to Firestore only");
         try {
-          await onDisconnect(rtdbRef).set(isOfflineForRTDB);
-          await set(rtdbRef, isOnlineForRTDB);
-          await setDoc(userRef, isOnlineForFirestore, { merge: true });
-          console.log("✅ RTDB reconnected and Firestore updated (online)");
+          await setDoc(userRef, offlineFirestore, { merge: true });
         } catch (err) {
-          console.error("⚠️ RTDB reconnect failed:", (err as Error).message);
+          console.warn("Firestore fallback update skipped:", err);
         }
-      } else {
-        console.log("⚠️ RTDB disconnected");
+        return;
+      }
+
+      try {
+        await onDisconnect(rtdbRef).set(offlineRTDB);
+        await waitForRTDBConnection();
+        await safeSet(rtdbRef, onlineRTDB);
+        await setDoc(userRef, onlineFirestore, { merge: true });
+        console.log("Presence: online (RTDB + Firestore synced)");
+      } catch (err) {
+        console.error("RTDB connection update failed:", err);
       }
     });
 
-    // 📱 Handle app state (background / foreground)
+    /* -----------------------------------------------------
+       AppState: Active / Inactive / Background
+    ----------------------------------------------------- */
     const handleAppStateChange = async (state: string) => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
       try {
-        if (!auth.currentUser) return;
-
         if (state === "active") {
-          console.log("📱 App active — reconnecting RTDB...");
+          console.log("App active — forcing online...");
           goOnline(getDatabase());
-
-          // Wait briefly for connection to stabilize
-          setTimeout(async () => {
-            await setDoc(userRef, isOnlineForFirestore, { merge: true });
-            await set(rtdbRef, isOnlineForRTDB);
-            console.log("✅ User marked online after resume");
-          }, 600);
-        } else {
-          console.log("📴 App backgrounded — setting offline + closing RTDB");
-          await setDoc(userRef, isOfflineForFirestore, { merge: true });
-          await set(rtdbRef, isOfflineForRTDB);
+          await waitForRTDBConnection();
+          await safeSet(rtdbRef, onlineRTDB);
+          await setDoc(userRef, onlineFirestore, { merge: true });
+        } else if (state === "background" || state === "inactive") {
+          console.log("📴 App background/inactive — marking offline...");
+          await safeSet(rtdbRef, offlineRTDB);
+          await new Promise((res) => setTimeout(res, 500));
           goOffline(getDatabase());
+          await setDoc(userRef, offlineFirestore, { merge: true });
         }
       } catch (err) {
-        console.error("⚠️ Presence update skipped:", (err as Error).message);
+        console.error("Presence appstate error:", err);
       }
     };
 
-    appStateSubscription = AppState.addEventListener("change", handleAppStateChange);
+    safeUnsub(appStateSub);
+    appStateSub = AppState.addEventListener("change", handleAppStateChange);
 
-    // Handle app termination (swipe kill or crash)
+    /* -----------------------------------------------------
+       App Exit (swipe or close)
+    ----------------------------------------------------- */
     const handleExit = async () => {
-      if (cleanupOnExit) return;
-      cleanupOnExit = true;
+      if (exiting) return;
+      exiting = true;
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      console.log("App swiped closed — marking user offline...");
       try {
-        console.log("App terminated — marking user offline...");
-        await setDoc(userRef, isOfflineForFirestore, { merge: true });
-        await set(rtdbRef, isOfflineForRTDB);
+        await safeSet(rtdbRef, offlineRTDB);
+        await new Promise((res) => setTimeout(res, 500));
         goOffline(getDatabase());
+        await setDoc(userRef, offlineFirestore, { merge: true });
       } catch (err) {
-        console.error("Cleanup on exit failed:", (err as Error).message);
+        console.error("Exit cleanup failed:", err);
+      } finally {
+        exiting = false;
       }
     };
 
-    // Safe platform-specific cleanup
     if (Platform.OS === "web" && typeof window !== "undefined") {
       window.addEventListener("beforeunload", handleExit);
     } else {
-      // React Native fallback — no window object
-      const exitHandler = AppState.addEventListener("change", (state) => {
-        if (state === "inactive" || state === "background") {
-          handleExit();
-        }
+      AppState.addEventListener("change", (state) => {
+        if (state === "inactive" || state === "background") handleExit();
       });
     }
 
-    // Fallback for React Native app termination
-    const originalConsoleError = console.error;
-    console.error = (...args) => {
-      if (args[0] && args[0].toString().includes("setNativeProps")) {
-        handleExit();
+ /* -----------------------------------------------------
+    Watchdog: Auto-Reconnect RTDB
+----------------------------------------------------- */
+    watchdogInterval = setInterval(async () => {
+      if (!auth.currentUser) return; // don’t run when logged out
+      try {
+        const infoRef = ref(rtdb, ".info/connected");
+        const snap = await new Promise<any>((resolve) => {
+          let resolved = false;
+          const tempUnsub = onValue(
+            infoRef,
+            (s) => {
+              if (!resolved) {
+                resolved = true;
+                if (typeof tempUnsub === "function") tempUnsub();
+                resolve(s);
+              }
+            },
+            { onlyOnce: true }
+          );
+        });
+
+        if (!snap?.val()) {
+          console.log("Watchdog: RTDB still offline — retrying...");
+          goOnline(getDatabase());
+          await waitForRTDBConnection();
+          await setDoc(userRef, onlineFirestore, { merge: true });
+        }
+      } catch (err) {
+        console.error("Watchdog error:", err);
       }
-      originalConsoleError(...args);
-    };
+    }, 10000);
   });
 };

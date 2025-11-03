@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -6,6 +7,7 @@ import {
   collection,
   doc,
   getDoc,
+  onSnapshot,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -59,7 +61,7 @@ export default function ProductForm() {
   });
   const [deviceLocation, setDeviceLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // 🧭 Get user’s location
+  // Get user’s location
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -70,30 +72,62 @@ export default function ProductForm() {
     })();
   }, []);
 
-  // 🧩 Load product if editing
   useEffect(() => {
-    const load = async () => {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "products", String(id)));
-      if (snap.exists()) {
-        const d = snap.data() as any;
-        setForm({
-          title: d.title || "",
-          description: d.description || "",
-          price: String(d.price ?? ""),
-          category: d.category || "",
-          imageUrl: d.imageUrl,
-          locationName: d.locationName || "",
-          lat: d.lat,
-          lng: d.lng,
-        });
+    if (!id) return;
+
+    let unsub: (() => void) | null = null;
+    let active = true;
+
+    // Debounce to avoid double subscription on quick re-entry
+    const timer = setTimeout(() => {
+      if (!active) return; // guard if component unmounted quickly
+
+      const productRef = doc(db, "products", String(id));
+      unsub = onSnapshot(
+        productRef,
+        (snap) => {
+          if (snap.exists()) {
+            const d = snap.data() as any;
+            setForm({
+              title: d.title || "",
+              description: d.description || "",
+              price: String(d.price ?? ""),
+              category: d.category || "",
+              imageUrl: d.imageUrl,
+              locationName: d.locationName || "",
+              lat: d.lat,
+              lng: d.lng,
+            });
+          }
+          setLoading(false);
+        },
+        (error) => {
+          console.warn("Firestore listener error:", error.message);
+          setLoading(false);
+        }
+      );
+    }, 300);
+
+    return () => {
+      // Mark as inactive BEFORE clearing
+      active = false;
+
+      // Clear the debounce timer first
+      clearTimeout(timer);
+
+      // Then unsubscribe safely
+      if (unsub) {
+        try {
+          unsub();
+          console.log("Firestore listener cleaned up (ProductForm)");
+        } catch (err) {
+          console.warn("Error cleaning Firestore listener:", err);
+        }
       }
-      setLoading(false);
     };
-    load();
   }, [id]);
 
-  // 🧠 Update location name from map
+  // Update location name from map
   useEffect(() => {
     if (lat && lng) {
       setForm((prev) => ({
@@ -107,7 +141,7 @@ export default function ProductForm() {
     }
   }, [lat, lng]);
 
-  // 🧍‍♂️ Set user’s role automatically
+  // Set user’s role automatically
   useEffect(() => {
     const loadUserRole = async () => {
       const user = auth.currentUser;
@@ -123,7 +157,7 @@ export default function ProductForm() {
     loadUserRole();
   }, []);
 
-  // 🖼️ Pick image
+  // Pick image
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -131,14 +165,14 @@ export default function ProductForm() {
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
     });
     if (!res.canceled) setImgLocalUri(res.assets[0].uri);
   };
 
-  // ☁️ Upload image if present
+  // Upload image if present
   const uploadImageIfAny = async (productId: string, uid: string) => {
     const uri = imgLocalUri;
     if (!uri) return form.imageUrl;
@@ -149,7 +183,7 @@ export default function ProductForm() {
     return await getDownloadURL(storageRef);
   };
 
-  // 💾 Save Product
+  // Save Product
   const save = async () => {
     try {
       const user = auth.currentUser;
@@ -160,16 +194,16 @@ export default function ProductForm() {
 
       setSaving(true);
 
-      // 🧾 Fetch user's name
+      // Fetch user's name
       let userName = "Unknown User";
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
-        const data = userDoc.data();
+        const data = userDoc.data() as any;
         userName = data.fullName || data.displayName || user.email || "Unnamed User";
       }
 
       if (id) {
-        // ✏️ Update existing
+        // Update existing
         const newUrl = await uploadImageIfAny(String(id), user.uid);
         await updateDoc(doc(db, "products", String(id)), {
           ...form,
@@ -183,16 +217,16 @@ export default function ProductForm() {
         // 🆕 Create new
         const userSnap = await getDoc(doc(db, "users", user.uid));
         const userData = userSnap.exists() ? userSnap.data() : {};
-        const userType = userData.userType || "Store Owner";
+        const userType = (userData as any).userType || "Store Owner";
 
         const docRef = await addDoc(collection(db, "products"), {
           userId: user.uid,
           userName,
-          userType, // ✅ new field for filtering
+          userType, // for filtering
           title: form.title,
           description: form.description,
           price: Number(form.price),
-          category: form.category, // optional: you can keep this for display
+          category: form.category, // optional display
           locationName: form.locationName || "",
           lat: form.lat || deviceLocation?.lat || null,
           lng: form.lng || deviceLocation?.lng || null,
@@ -205,10 +239,10 @@ export default function ProductForm() {
         if (imageUrl) await updateDoc(docRef, { imageUrl });
       }
 
-      Alert.alert("✅ Success", `Product ${id ? "updated" : "created"}!`);
+      Alert.alert("Success", `Product ${id ? "updated" : "created"}!`);
       router.back();
     } catch (e: any) {
-      console.error("🔥 Firestore error:", e);
+      console.error("Firestore error:", e);
       Alert.alert("Error", e.message);
     } finally {
       setSaving(false);
@@ -223,114 +257,187 @@ export default function ProductForm() {
     );
   }
 
+  // ---------- Layout (updated) ----------
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.title}>{id ? "Edit Product" : "Add Product"}</Text>
-
-      {/* 🖼️ Image Picker */}
-      <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
-        {imgLocalUri || form.imageUrl ? (
-          <Image source={{ uri: imgLocalUri || form.imageUrl }} style={styles.img} />
-        ) : (
-          <Text style={{ color: "#1E88E5" }}>+ Select Image</Text>
-        )}
-      </TouchableOpacity>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Title"
-        value={form.title}
-        onChangeText={(v) => setForm({ ...form, title: v })}
-      />
-
-      <TextInput
-        style={[styles.input, { height: 90 }]}
-        placeholder="Description"
-        value={form.description}
-        onChangeText={(v) => setForm({ ...form, description: v })}
-        multiline
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Price (₱)"
-        value={form.price}
-        onChangeText={(v) => setForm({ ...form, price: v })}
-        keyboardType="numeric"
-      />
-
-      {/* 🏷️ Category Display (auto-set) */}
-      <View style={styles.autoCategoryBox}>
-        <Text style={{ fontWeight: "bold", color: "#000" }}>Category:</Text>
-        <Text style={{ color: "#1E88E5", fontSize: 16, fontWeight: "600" }}>
-          {form.category || "Loading..."}
-        </Text>
+    <View style={styles.wrapper}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{id ? "Edit Product" : "Add Product"}</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      {/* 📍 Location Picker */}
-      <TouchableOpacity
-        style={[styles.input, { justifyContent: "center" }]}
-        onPress={() => {
-          router.push({
-            pathname: "/modals/location-picker",
-            params: { preserve: "true" },
-          });
-        }}
-      >
-        <Text style={{ color: form.locationName ? "#000" : "#999" }}>
-          {form.locationName || "📍 Pick location on map"}
-        </Text>
-      </TouchableOpacity>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+        {/* Image Picker */}
+        <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
+          {imgLocalUri || form.imageUrl ? (
+            <Image source={{ uri: imgLocalUri || form.imageUrl }} style={styles.img} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={40} color="#4A8C2A" />
+              <Text style={{ color: "#4A8C2A", marginTop: 8 }}>Select Image</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
-      {/* 💾 Save */}
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.7 }]}
-        onPress={save}
-        disabled={saving}
-      >
-        <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* Card */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Product Title</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter product name"
+            value={form.title}
+            onChangeText={(v) => setForm({ ...form, title: v })}
+          />
+
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            style={[styles.input, { height: 100, textAlignVertical: "top" }]}
+            placeholder="Describe your product"
+            value={form.description}
+            onChangeText={(v) => setForm({ ...form, description: v })}
+            multiline
+          />
+
+          <Text style={styles.label}>Price (₱)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="0.00"
+            keyboardType="numeric"
+            value={form.price}
+            onChangeText={(v) => setForm({ ...form, price: v })}
+          />
+
+          <View style={styles.autoCategoryBox}>
+            <Text style={styles.label}>Category</Text>
+            <Text style={styles.categoryValue}>{form.category || "Loading..."}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.input, { justifyContent: "center" }]}
+            onPress={() =>
+              router.push({
+                pathname: "/modals/location-picker",
+                params: { preserve: "true" },
+              })
+            }
+          >
+            <Text style={{ color: form.locationName ? "#000" : "#999" }}>
+              {form.locationName || "Pick location on map"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Save */}
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+          onPress={save}
+          disabled={saving}
+        >
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save Product</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16, paddingTop: 100 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  wrapper: {
+    flex: 1,
+    backgroundColor: "#f7f9fb",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#4A8C2A",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  container: {
+    flex: 1,
+    padding: 16,
+  },
   imageBox: {
-    height: 160,
+    height: 200,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#cfd8dc",
-    borderRadius: 10,
+    borderColor: "#ddd",
+    overflow: "hidden",
+    marginBottom: 12,
+    backgroundColor: "#f2f6f3",
+  },
+  img: {
+    width: "100%",
+    height: "100%",
+  },
+  imagePlaceholder: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
   },
-  img: { width: "100%", height: "100%", borderRadius: 10 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  label: {
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 6,
+  },
   input: {
     borderWidth: 1,
     borderColor: "#cfd8dc",
     borderRadius: 10,
     padding: 10,
-    marginBottom: 12,
+    backgroundColor: "#fff",
+    marginBottom: 14,
   },
   autoCategoryBox: {
-    backgroundColor: "#f2f6fa",
+    backgroundColor: "#f0f7f0",
     padding: 12,
     borderRadius: 10,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#cfd8dc",
+    marginBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  saveBtn: {
-    backgroundColor: "#1E88E5",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 4,
+  categoryValue: {
+    color: "#4A8C2A",
+    fontWeight: "bold",
+    fontSize: 16,
   },
-  saveText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  saveBtn: {
+    backgroundColor: "#4A8C2A",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+    elevation: 3,
+  },
+  saveText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

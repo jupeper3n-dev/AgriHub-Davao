@@ -35,7 +35,6 @@ import { auth, db } from "../firebaseConfig";
 export default function ProfileView() {
   const { userId: rawParam, uid } = useLocalSearchParams();
   const router = useRouter();
-  // ✅ Accepts either ?userId=... or ?uid=...
   const userId = Array.isArray(rawParam) ? rawParam[0] : rawParam || uid;
 
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -45,14 +44,11 @@ export default function ProfileView() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
-  // 🧱 Report user modal states
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
   const [hasReported, setHasReported] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
-  // 🔄 Pull-to-refresh
-// 🔄 Pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
@@ -105,7 +101,7 @@ export default function ProfileView() {
     }
 
     try {
-      setReportLoading(true); // ⏳ Start spinner
+      setReportLoading(true);
 
       await addDoc(collection(db, "reports"), {
         reporterId: auth.currentUser.uid,
@@ -114,24 +110,24 @@ export default function ProfileView() {
         createdAt: serverTimestamp(),
       });
 
-      Alert.alert("✅ Report Submitted", "The user has been reported.");
+      Alert.alert("Report Submitted", "The user has been reported.");
       setReportModalVisible(false);
       setReportReason("");
     } catch (err) {
       console.error("Report error:", err);
       Alert.alert("Error", "Failed to submit report.");
     } finally {
-      setReportLoading(false); // ✅ Stop spinner
+      setReportLoading(false); 
     }
   };
 
   const currentUser = auth.currentUser;
-  // ⭐ Rating system
+  // Rating system
   const [myRating, setMyRating] = useState<number | null>(null);
   const [avgRating, setAvgRating] = useState<number>(0);
   const [ratingsCount, setRatingsCount] = useState<number>(0);
 
-  // 🕒 Helper for "X time ago"
+  // Helper for "X time ago"
   const getTimeAgo = (timestamp: any) => {
     if (!timestamp) return "";
     const date =
@@ -144,7 +140,7 @@ export default function ProfileView() {
     return `${Math.floor(seconds / 86400)}d ago`;
   };
 
-  // ✅ Load user info
+  // Load user info
   
   useEffect(() => {
     const fetchUser = async () => {
@@ -167,7 +163,7 @@ export default function ProfileView() {
     fetchUser();
   }, [userId]);
 
-  // ✅ Load user posts (kept with full actions)
+  // Load user posts (kept with full actions)
   useEffect(() => {
     if (!userId) return;
     const q = query(
@@ -191,7 +187,7 @@ export default function ProfileView() {
     return () => unsub();
   }, [userId]);
 
-  // ✅ Check if current user has already reported this profile
+  // Check if current user has already reported this profile
   useEffect(() => {
     if (!auth.currentUser || !userId) return;
 
@@ -203,7 +199,7 @@ export default function ProfileView() {
           where("reportedId", "==", userId)
         );
         const snap = await getDocs(q);
-        setHasReported(!snap.empty); // ✅ true if already reported
+        setHasReported(!snap.empty); // true if already reported
       } catch (err) {
         console.error("Check report error:", err);
       }
@@ -212,7 +208,7 @@ export default function ProfileView() {
     checkReport();
   }, [userId]);
 
-  // ✅ Live follower count
+  // Live follower count
   useEffect(() => {
     if (!userId) return;
     const ref = collection(db, "follows", String(userId), "followers");
@@ -258,7 +254,7 @@ export default function ProfileView() {
     return () => unsub();
     }, [userId, currentUser]);
 
-  // ✅ Follow state (live)
+  // Follow state (live)
   useEffect(() => {
     if (!currentUser || !userId) return;
     const ref = doc(db, "follows", currentUser.uid, "following", String(userId));
@@ -266,7 +262,7 @@ export default function ProfileView() {
     return () => unsub();
   }, [currentUser, userId]);
 
-  // ✅ Toggle Follow
+  // Toggle Follow
   const toggleFollow = async () => {
     if (!currentUser) return Alert.alert("Login Required");
     const me = currentUser.uid;
@@ -295,7 +291,7 @@ export default function ProfileView() {
     }
   };
 
-  // ✅ Start Chat (with loading overlay)
+  // Start Chat (with loading overlay)
   const startChat = async () => {
     if (!currentUser) {
       Alert.alert("Login Required", "You must be logged in to send messages.");
@@ -332,7 +328,7 @@ export default function ProfileView() {
     }
   };
 
-  // ✅ Render Post (ALL actions preserved)
+  // Render Post (ALL actions preserved)
   const renderPost = ({ item }: { item: any }) => {
     const user = auth.currentUser;
     const liked = item.likes?.includes(user?.uid);
@@ -483,7 +479,7 @@ export default function ProfileView() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 🌀 Chat loading overlay */}
+      {/* Chat loading overlay */}
       <Modal visible={chatLoading} transparent animationType="fade">
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingBox}>
@@ -516,7 +512,7 @@ export default function ProfileView() {
             👥 Followers: {followerCount}  •  ⭐ {avgRating.toFixed(1)} ({ratingsCount})
             </Text>
 
-            {/* ⭐ Rate this user */}
+            {/* Rate this user */}
             {currentUser?.uid !== userId && (
             <View style={styles.rateRow}>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -528,7 +524,7 @@ export default function ProfileView() {
                     const ratingId = `${userId}_${currentUser.uid}`;
                     const ratingRef = doc(db, "ratings", ratingId);
 
-                    // 🧹 Delete any stray old rating docs from previous versions
+                    // Delete any stray old rating docs from previous versions
                     const oldRatings = query(
                     collection(db, "ratings"),
                     where("userId", "==", userId),
@@ -539,7 +535,7 @@ export default function ProfileView() {
                     if (d.id !== ratingId) await deleteDoc(d.ref);
                     }
 
-                    // ✅ Create or overwrite rating doc (one per user)
+                    // Create or overwrite rating doc (one per user)
                     await setDoc(
                     ratingRef,
                     {
@@ -570,7 +566,7 @@ export default function ProfileView() {
                     style={{
                     fontSize: 26,
                     marginHorizontal: 2,
-                    color: n <= (myRating || 0) ? "#FFD700" : "#C7C7C7", // ⭐ yellow if active, gray if not
+                    color: n <= (myRating || 0) ? "#FFD700" : "#C7C7C7",
                     }}
                 >
                     ★
@@ -605,7 +601,7 @@ export default function ProfileView() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.msgBtn} onPress={startChat}>
-                <Text style={styles.msgText}>💬 Message</Text>
+                <Text style={styles.msgText}>Message</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

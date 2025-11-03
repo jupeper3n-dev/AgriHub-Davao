@@ -35,7 +35,7 @@ export default function SavedPosts() {
   const router = useRouter();
   const user = auth.currentUser;
 
-  // ✅ Real-time load saved posts
+  // Real-time load saved posts
   useEffect(() => {
     if (!user) {
       Alert.alert("Not logged in", "Please log in to view saved posts.");
@@ -63,7 +63,7 @@ export default function SavedPosts() {
     return () => unsub();
   }, [user]);
 
-  // ✅ Unsave post
+  // Unsave post
   const handleUnsave = async (id: string) => {
     try {
       if (!user) return;
@@ -75,7 +75,7 @@ export default function SavedPosts() {
     }
   };
 
-  // ✅ Like a post
+  // Like a post
   const toggleReaction = async (item: any) => {
     try {
       const user = auth.currentUser;
@@ -95,7 +95,7 @@ export default function SavedPosts() {
     }
   };
 
-  // ✅ Share post
+  // Share post
   const handleShare = async (item: any) => {
     try {
       const link = `https://geo-davao.app/product?id=${item.postId}`;
@@ -111,7 +111,7 @@ export default function SavedPosts() {
     }
   };
 
-  // ✅ Comment post
+  // Comment post
   const handleComments = (item: any) => {
     router.push({
       pathname: "/modals/comments",
@@ -119,13 +119,13 @@ export default function SavedPosts() {
     });
   };
 
-  // ✅ Pull-to-refresh
+  // Pull-to-refresh
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 800);
   }, []);
 
-  // ✅ Render card (same layout as Dashboard)
+  // Render card (same layout as Dashboard)
   const renderPost = ({ item }: { item: any }) => {
     const user = auth.currentUser;
     const liked = item.likes?.includes(user?.uid);
@@ -165,7 +165,7 @@ export default function SavedPosts() {
           </View>
         ) : null}
 
-        {/* ❤️ 💬 📤 ❌ Buttons */}
+        {/* Buttons */}
         <View style={styles.actionsRow}>
           <TouchableOpacity onPress={() => toggleReaction(item)}>
             <Text style={[styles.iconText, liked && { color: "#E91E63" }]}>
@@ -229,10 +229,17 @@ export default function SavedPosts() {
       <View
         style={[
           styles.navbar,
-          Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight } : {},
+          Platform.OS === "android" ? { paddingTop: 20 } : {},
         ]}
       >
         <Text style={styles.navTitle}>Saved Posts</Text>
+
+        <TouchableOpacity
+          style={styles.closeBtn}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.closeText}>✕</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -252,16 +259,18 @@ export default function SavedPosts() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#fff" },
   navbar: {
-    backgroundColor: "#1E88E5",
-    paddingVertical: 15,
+    backgroundColor: "#4A8C2A",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-  navTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", paddingTop: 20 },
+  navTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", },
   card: {
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
-    marginTop: 20,
     marginBottom: 14,
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -296,4 +305,16 @@ const styles = StyleSheet.create({
   detailsText: { color: "#fff", fontWeight: "bold" },
   empty: { textAlign: "center", color: "#999", marginTop: 40 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  closeBtn: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  closeText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
 });

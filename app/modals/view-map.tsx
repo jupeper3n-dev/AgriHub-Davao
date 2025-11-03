@@ -2,12 +2,12 @@ import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
@@ -23,7 +23,7 @@ export default function ViewMapModal() {
   const [eta, setEta] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Get user location
+  // Get user location
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -38,7 +38,7 @@ export default function ViewMapModal() {
     })();
   }, []);
 
-  // ✅ Fetch route from OpenRouteService API
+  // Fetch route from OpenRouteService API
   useEffect(() => {
     const fetchRoute = async () => {
       if (!userLocation) return;
@@ -146,7 +146,7 @@ export default function ViewMapModal() {
               longitudeDelta: 0.1,
             }}
           >
-            {/* 🟦 Draw the route */}
+            {/* Draw the route */}
             {routeCoords.length > 0 && (
               <Polyline
                 coordinates={routeCoords}
@@ -155,7 +155,7 @@ export default function ViewMapModal() {
               />
             )}
 
-            {/* 🟢 User marker */}
+            {/* User marker */}
             <Marker
               coordinate={{
                 latitude: userLocation.latitude,
@@ -165,7 +165,7 @@ export default function ViewMapModal() {
               pinColor="green"
             />
 
-            {/* 🔴 Store marker */}
+            {/* Store marker */}
             <Marker
               coordinate={{
                 latitude: Number(lat),

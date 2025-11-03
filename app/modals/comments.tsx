@@ -1,26 +1,26 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    updateDoc,
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
 
@@ -33,7 +33,7 @@ export default function CommentsModal() {
   const [replyTo, setReplyTo] = useState<any | null>(null);
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({});
 
-  // ✅ Load all comments
+  // Load all comments
   useEffect(() => {
     if (!productId) return;
 
@@ -52,7 +52,7 @@ export default function CommentsModal() {
     return () => unsub();
   }, [productId]);
 
-  // ✅ Post comment or reply
+  // Post comment or reply
   const handleSend = async () => {
     const user = auth.currentUser;
     if (!user) return Alert.alert("Please log in first.");
@@ -79,7 +79,7 @@ export default function CommentsModal() {
     }
   };
 
-  // ❤️ Like / Unlike
+  // Like / Unlike
   const toggleLike = async (comment: any) => {
     const user = auth.currentUser;
     if (!user) return Alert.alert("Please log in to like comments.");
@@ -96,7 +96,7 @@ export default function CommentsModal() {
     }
   };
 
-  // 🔄 Toggle reply thread visibility
+  // Toggle reply thread visibility
   const toggleThread = (commentId: string) => {
     setExpandedThreads((prev) => ({
       ...prev,
@@ -104,7 +104,7 @@ export default function CommentsModal() {
     }));
   };
 
-  // 🧠 Recursive render of replies
+  // Recursive render of replies
   const renderReplies = (parentId: string, depth = 1) => {
     const replies = comments.filter((c) => c.parentId === parentId);
     if (replies.length === 0) return null;
@@ -143,7 +143,7 @@ export default function CommentsModal() {
             )}
           </View>
 
-          {/* 🔁 Recursive replies (conditionally rendered) */}
+          {/* Recursive replies (conditionally rendered) */}
           {isExpanded && renderReplies(reply.id, depth + 1)}
         </View>
       );
@@ -181,7 +181,7 @@ export default function CommentsModal() {
           )}
         </View>
 
-        {/* 🔁 Nested replies */}
+        {/* Nested replies */}
         {isExpanded && renderReplies(item.id)}
       </View>
     );
@@ -198,7 +198,7 @@ export default function CommentsModal() {
   return (
     <Modal animationType="slide" visible={true} onRequestClose={() => router.back()}>
       <View style={styles.container}>
-        {/* 🔹 Header with Back */}
+        {/* Header with Back */}
         <View style={styles.header}>
         <Text style={styles.headerTitle}>💬 Comments</Text>
         <TouchableOpacity onPress={() => router.back()}>

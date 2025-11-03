@@ -17,7 +17,7 @@ import {
 import MapView, { Marker, Polygon } from "react-native-maps";
 import { auth, db } from "../../../firebaseConfig";
 
-// ✅ Davao Region Polygon (bounds)
+// Davao Region Polygon (bounds)
 const davaoRegionCoords = [
   [125.179443, 6.473971],
   [125.36911, 6.359184],
@@ -44,7 +44,7 @@ const davaoPolygon = davaoRegionCoords.map(([lng, lat]) => ({
   longitude: lng,
 }));
 
-// 🎨 Marker colors by category
+// Marker colors by category
 const markerColors: Record<string, string> = {
   farmer: "#FB8C00", // Orange
   consumer: "#1E88E5", // Blue
@@ -58,7 +58,7 @@ export default function MapScreen() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const router = useRouter();
 
-  // 📍 Get current user location
+  // Get current user location
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -76,7 +76,7 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // 🧭 Load active products from Firestore with role-based visibility
+  // Load active products from Firestore with role-based visibility
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -92,21 +92,21 @@ export default function MapScreen() {
         const all: any[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          // ✅ Only include active ones
+          // Only include active ones
           if (data.status && data.status.toLowerCase() !== "active") return;
           all.push({ id: d.id, ...data });
         });
 
         let visible = all;
 
-        // ✅ Apply visibility rules
+        // Apply visibility rules
         if (userRole === "farmer" || userRole === "consumer") {
           visible = visible.filter(
             (p) => (p.userType || "").toLowerCase() === "store owner"
           );
         }
 
-        // ✅ Store Owner can see everyone
+        // Store Owner can see everyone
         setProducts(visible);
       });
 
@@ -116,11 +116,11 @@ export default function MapScreen() {
     loadProducts();
   }, []);
 
-  // 🗺️ Check if coordinates are within Davao region
+  // Check if coordinates are within Davao region
   const isInsideDavao = (lat: number, lon: number) =>
     inside([lon, lat], davaoRegionCoords);
 
-  // 🔍 Filter products based on selected category
+  // Filter products based on selected category
   const filteredProducts =
     filter === "All"
       ? products
@@ -128,7 +128,7 @@ export default function MapScreen() {
           (p) => (p.userType || "").toLowerCase() === filter.toLowerCase()
         );
 
-  // 🖌️ Get marker color
+  // Get marker color
   const getMarkerColor = (userType: string) =>
     markerColors[userType?.toLowerCase()] || "#757575"; // gray fallback
 
@@ -179,7 +179,7 @@ export default function MapScreen() {
         )}
       </MapView>
 
-      {/* 🧭 Filter Buttons */}
+      {/* Filter Buttons */}
       <View style={styles.filterBar}>
         {["All", "Farmer", "Consumer", "Store Owner"].map((cat) => (
           <TouchableOpacity
@@ -202,7 +202,7 @@ export default function MapScreen() {
         ))}
       </View>
 
-      {/* 🎨 Legend */}
+      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.colorDot, { backgroundColor: "#1E88E5" }]} />
@@ -218,7 +218,7 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* 🪟 Product Preview Modal */}
+      {/* Product Preview Modal */}
       <Modal
         visible={!!selectedProduct}
         transparent
@@ -277,10 +277,10 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // 🔍 Filter Bar
+  // Filter Bar
   filterBar: {
     position: "absolute",
-    top: 50,
+    top: 20,
     alignSelf: "center",
     flexDirection: "row",
     backgroundColor: "rgba(255,255,255,0.9)",
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   filterText: { color: "#333", fontWeight: "600" },
   filterTextActive: { color: "#fff" },
 
-  // 🎨 Legend
+  // Legend
   legend: {
     position: "absolute",
     bottom: 20,
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
 
-  // 🪟 Modal
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",

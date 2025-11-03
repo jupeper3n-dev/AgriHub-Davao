@@ -30,7 +30,7 @@ import {
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
 
-// 🕓 Utility: format "X minutes ago"
+// Utility: format "X minutes ago"
 function getTimeAgo(date: Date): string {
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
@@ -65,7 +65,7 @@ export default function DashboardScreen() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
 
-  // ✅ Load user type
+  // Load user type
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -76,10 +76,10 @@ export default function DashboardScreen() {
       const role = snap.data().userType || "Store Owner";
       setUserRole(role);
 
-      // ✅ Only redirect once everything is settled
+      // Only redirect once everything is settled
       setTimeout(() => {
         if (role === "Admin") {
-          console.log("👑 Admin detected, redirecting to admin panel...");
+          console.log("Admin detected, redirecting to admin panel...");
           router.replace("../admin-panel");
         }
       }, 300); // wait a tiny bit for auth state to settle
@@ -88,7 +88,7 @@ export default function DashboardScreen() {
     return () => unsub();
   }, []);
 
-  // ✅ Load posts based on role
+  // Load posts based on role
   useEffect(() => {
     if (!userRole) return;
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
@@ -98,7 +98,7 @@ export default function DashboardScreen() {
 
       let visiblePosts = allItems;
 
-      // ✅ Restrict what each role can see
+      // Restrict what each role can see
       if (userRole?.toLowerCase() === "farmer" || userRole?.toLowerCase() === "consumer") {
         visiblePosts = allItems.filter(
           (p) => (p.category || "").toLowerCase() === "store owner"
@@ -120,7 +120,7 @@ export default function DashboardScreen() {
     return () => unsub();
   }, [userRole]);
 
-  // ✅ Real-time sync for saved posts
+  // Real-time sync for saved posts
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -140,7 +140,7 @@ export default function DashboardScreen() {
     setTimeout(() => setRefreshing(false), 800);
   }, []);
 
-  // ✅ Permission check
+  // Permission check
   const canInteractWith = (targetUserType: string): boolean => {
     const target = (targetUserType || "").toLowerCase();
 
@@ -152,7 +152,7 @@ export default function DashboardScreen() {
     return true;
   };
 
-  // ✅ Like post
+  // Like post
   const toggleReaction = async (item: any) => {
     if (!canInteractWith(item.category)) {
       Alert.alert("Access Denied", "You cannot like this post.");
@@ -177,7 +177,7 @@ export default function DashboardScreen() {
     }
   };
 
-  // ✅ Share post
+  // Share post
   const handleShare = async (item: any) => {
     if (!canInteractWith(item.category)) {
       Alert.alert("Access Denied", "You cannot share this post.");
@@ -198,7 +198,7 @@ export default function DashboardScreen() {
     }
   };
 
-  // ✅ Comment post
+  // Comment post
   const handleComments = (item: any) => {
     if (!canInteractWith(item.category)) {
       Alert.alert("Access Denied", "You cannot comment on this post.");
@@ -207,7 +207,7 @@ export default function DashboardScreen() {
     router.push({ pathname: "/modals/comments", params: { productId: item.id } });
   };
 
-  // ✅ Save/Unsave Post
+  // Save/Unsave Post
   const handleSavePost = async (item: any) => {
     const user = auth.currentUser;
     if (!user) {
@@ -249,7 +249,7 @@ export default function DashboardScreen() {
     }
   };
 
-  // ✅ Render Post
+  // Render Post
   const renderPost = ({ item }: { item: any }) => {
     const user = auth.currentUser;
     const liked = item.likes?.includes(user?.uid);
@@ -344,7 +344,7 @@ export default function DashboardScreen() {
     );
   };
 
-  // ✅ Loading state
+  // Loading state
   if (loading) {
     return (
       <View style={styles.center}>
@@ -354,12 +354,12 @@ export default function DashboardScreen() {
     );
   }
 
-  // ✅ Main Render
+  // Main Render
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
 
-      {/* 🔹 Top Navbar */}
+      {/* Top Navbar */}
       <View style={styles.topBar}>
         <Text style={styles.navTitle}>AgriHub Davao</Text>
         <TouchableOpacity onPress={() => router.push("/search-users")}>
@@ -367,9 +367,8 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 🔹 Tabs */}
       <View style={styles.navbar}>
-        {["Home", "Messages", "Notifications"].map((tab) => (
+        {["Home", "Messages"].map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.navItem, activeTab === tab && styles.navItemActive]}
@@ -388,7 +387,7 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      {/* 🔹 Posts */}
+      {/* Posts */}
       <View style={styles.container}>
         <Text style={styles.title}>Community Posts</Text>
         <FlatList
@@ -404,6 +403,18 @@ export default function DashboardScreen() {
           contentContainerStyle={{ paddingBottom: 50 }}
         />
       </View>
+      {/* Add Product Button */}
+<View style={styles.addButtonContainer}>
+  <TouchableOpacity
+    style={styles.addButton}
+    onPress={() => {
+      router.push("/modals/product-form");
+    }}
+  >
+    <Ionicons name="add-circle-outline" size={24} color="#fff" />
+    <Text style={styles.addButtonText}>Add Product</Text>
+  </TouchableOpacity>
+</View>
     </SafeAreaView>
   );
 }
@@ -417,7 +428,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A8C2A",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 60
   },
   navTitle: { color: "#fff", fontSize: 28, fontWeight: "bold" },
   navbar: {
@@ -432,7 +442,7 @@ const styles = StyleSheet.create({
   navText: { color: "#fff", fontSize: 16, fontWeight: "500" },
   navTextActive: { fontWeight: "bold", color: "#000" },
   container: { flex: 1, backgroundColor: "#f9f9f9", padding: 10 },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20, marginLeft: 10,},
+  title: { fontSize: 30, fontWeight: "bold", marginBottom: 20, marginTop: 10, marginLeft: 10,},
   card: {
     backgroundColor: "#fff",
     padding: 14,
@@ -482,4 +492,28 @@ const styles = StyleSheet.create({
   detailsText: { color: "#fff", fontWeight: "bold" },
   empty: { textAlign: "center", color: "#999", marginTop: 40 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  addButtonContainer: {
+  position: "absolute",
+  bottom: 20,
+  left: 0,
+  right: 0,
+  paddingHorizontal: 20,
+  alignItems: "center",
+},
+addButton: {
+  flexDirection: "row",
+  justifyContent: "center",
+  alignItems: "center",
+  backgroundColor: "#43A047",
+  paddingVertical: 14,
+  borderRadius: 10,
+  width: "100%",
+  elevation: 3,
+},
+addButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 18,
+  marginLeft: 8,
+},
 });

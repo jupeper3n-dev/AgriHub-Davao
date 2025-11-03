@@ -70,7 +70,7 @@ export default function UploadVerification() {
         submittedAt: serverTimestamp(),
       });
 
-      Alert.alert("✅ Submitted", "Your documents have been submitted for verification.");
+      Alert.alert("Submitted", "Your documents have been submitted for verification.");
       router.back();
     } catch (err: any) {
       console.error(err);
@@ -80,7 +80,7 @@ export default function UploadVerification() {
     }
   };
 
-  // 🟡 Block re-upload if already pending/approved
+  // Block re-upload if already pending/approved
   if (status === "pending" || status === "approved") {
     return (
       <View style={styles.centered}>
@@ -94,8 +94,8 @@ export default function UploadVerification() {
           ]}
         >
           {status === "approved"
-            ? "✅ Your account is verified!"
-            : "⏳ Your verification is under review."}
+            ? "Your account is verified!"
+            : "Your verification is under review."}
         </Text>
         <TouchableOpacity
           style={styles.closeBtn}

@@ -46,44 +46,82 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { refresh } = useLocalSearchParams();
 
-  // ✅ Load data
   useFocusEffect(
     useCallback(() => {
       const user = auth.currentUser;
       if (!user) return;
 
-      const unsubUser = onSnapshot(doc(db, "users", user.uid), (snap) => {
-        if (snap.exists()) setUserData(snap.data());
-        setLoading(false);
-      });
+      // Guards
+      let isMounted = true;
+      let unsubUser: (() => void) | null = null;
+      let unsubVerify: (() => void) | null = null;
+      let unsubProducts: (() => void) | null = null;
 
-      // 🟢 Listen to verification from both sources
-      const unsubVerify = onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
-        if (snap.exists()) {
-          setVerification(snap.data().status); // use string status if available
-        } else if (userData?.verified) {
-          // fallback to boolean field in users doc
-          setVerification("approved");
-        } else {
-          setVerification(null);
+      // Debounce to avoid overlapping listeners on rapid focus transitions
+      const timer = setTimeout(() => {
+        if (!isMounted) return;
+
+        try {
+          const userRef = doc(db, "users", user.uid);
+          unsubUser = onSnapshot(
+            userRef,
+            (snap) => {
+              if (!isMounted) return;
+              if (snap.exists()) setUserData(snap.data());
+              setLoading(false);
+            },
+            (err) => console.warn("users listener:", err.message)
+          );
+
+          const verifyRef = doc(db, "user_verifications", user.uid);
+          unsubVerify = onSnapshot(
+            verifyRef,
+            (snap) => {
+              if (!isMounted) return;
+              if (snap.exists()) {
+                setVerification(snap.data().status);
+              } else if (userData?.verified) {
+                setVerification("approved");
+              } else {
+                setVerification(null);
+              }
+            },
+            (err) => console.warn("verifications listener:", err.message)
+          );
+
+          const q = query(
+            collection(db, "products"),
+            where("userId", "==", user.uid),
+            orderBy("createdAt", "desc")
+          );
+
+          unsubProducts = onSnapshot(
+            q,
+            (snap) => {
+              if (!isMounted) return;
+              const rows: Product[] = [];
+              snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as any) }));
+              setMyProducts(rows);
+            },
+            (err) => console.warn("products listener:", err.message)
+          );
+        } catch (e: any) {
+          console.error("Firestore subscription error:", e.message);
         }
-      });
+      }, 300); // delay ensures previous listener cleanup finishes first
 
-      const q = query(
-        collection(db, "products"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const unsubProducts = onSnapshot(q, (snap) => {
-        const rows: Product[] = [];
-        snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as any) }));
-        setMyProducts(rows);
-      });
-
+      // Cleanup
       return () => {
-        unsubUser();
-        unsubVerify();
-        unsubProducts();
+        isMounted = false;
+        clearTimeout(timer);
+        try {
+          unsubUser && unsubUser();
+          unsubVerify && unsubVerify();
+          unsubProducts && unsubProducts();
+          console.log("ProfileScreen listeners cleaned up safely");
+        } catch (e) {
+          console.warn("Cleanup error:", e);
+        }
       };
     }, [refresh])
   );
@@ -95,19 +133,19 @@ export default function ProfileScreen() {
       if (user) {
         const userRef = doc(db, "users", user.uid);
 
-        // ✅ Update Firestore *before* signing out
+        // Update Firestore *before* signing out
         await updateDoc(userRef, {
           isOnline: false,
           lastSeen: serverTimestamp(),
         });
 
-        console.log("✅ User set offline in Firestore before logout");
+        console.log("User set offline in Firestore before logout");
       }
 
-      // ✅ Now safe to log out
+      // Now safe to log out
       await signOut(auth);
 
-      console.log("🔒 Signed out successfully");
+      console.log("Signed out successfully");
       router.replace("/login");
     } catch (err) {
       console.error("Logout error:", err);
@@ -135,7 +173,7 @@ export default function ProfileScreen() {
     );
   }
 
-// 🧩 Unified verification status
+// Unified verification status
 let statusLabel = "Not Verified"; // default
 let statusColor = "#E53935"; // red
 
@@ -167,20 +205,20 @@ if (userData?.verified === true || verification === "approved") {
             <Text style={styles.name}>{userData?.fullName || "No Name"}</Text>
             <Text style={styles.email}>{userData?.email}</Text>
 
-            {/* 🧭 Role Display */}
+            {/* Role Display */}
             {userData?.userType && (
               <Text style={styles.roleBadge}>
-                👤 {userData.userType}
+                {userData.userType}
               </Text>
             )}
 
             {/* Verification Badges */}
             <Text style={[styles.badge, { backgroundColor: statusColor }]}>
               {statusLabel === "Verified"
-                ? "✅ Verified"
+                ? "Verified"
                 : statusLabel === "Pending Verification"
-                ? "⏳ Pending Verification"
-                : "❌ Not Verified"}
+                ? "Pending Verification"
+                : "Not Verified"}
             </Text>
 
             {statusLabel === "Not Verified" && (

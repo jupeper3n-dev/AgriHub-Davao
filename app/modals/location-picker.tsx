@@ -5,7 +5,7 @@ import MapView, { MapPressEvent, Marker, Polygon } from "react-native-maps";
 // @ts-ignore
 import inside from "point-in-polygon";
 
-// ✅ Davao Region Polygon (bounds)
+// Davao Region Polygon (bounds)
 const davaoRegionCoords = [
   [125.179443, 6.473971],
   [125.36911, 6.359184],
@@ -36,7 +36,7 @@ export default function LocationPicker() {
   const router = useRouter();
   const [selectedLocation, setSelectedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // 🧭 Check if coordinates are inside Davao polygon
+  // Check if coordinates are inside Davao polygon
   const isInsideDavao = (lat: number, lon: number) => inside([lon, lat], davaoRegionCoords);
 
   const handleMapPress = (event: MapPressEvent) => {
@@ -56,7 +56,7 @@ export default function LocationPicker() {
 
   const handleConfirm = () => {
     if (selectedLocation) {
-      // ✅ Pass data to previous route instead of reopening
+      // Pass data to previous route instead of reopening
       router.back();
 
       setTimeout(() => {
@@ -80,7 +80,7 @@ export default function LocationPicker() {
         }}
         onPress={handleMapPress}
       >
-        {/* 🗺️ Davao Region Polygon */}
+        {/* Davao Region Polygon */}
         <Polygon
           coordinates={davaoPolygon}
           strokeColor="rgba(30,136,229,0.8)"
@@ -88,7 +88,7 @@ export default function LocationPicker() {
           strokeWidth={2}
         />
 
-        {/* 📍 Selected Marker */}
+        {/* Selected Marker */}
         {selectedLocation && (
           <Marker coordinate={selectedLocation} title="Selected Location" />
         )}

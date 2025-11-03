@@ -1,20 +1,20 @@
 import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    updateDoc
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { db } from "../../firebaseConfig";
 
@@ -80,7 +80,7 @@ export default function ReportedUsers() {
       await updateDoc(doc(db, "users", selectedUser.id), {
         suspendedUntil: suspendUntil,
       });
-      Alert.alert("✅ User Suspended", `${selectedUser.fullName} is suspended for ${days} days.`);
+      Alert.alert("User Suspended", `${selectedUser.fullName} is suspended for ${days} days.`);
       setModalVisible(false);
       setSuspendDays("");
     } catch (err) {
@@ -101,7 +101,7 @@ export default function ReportedUsers() {
           onPress: async () => {
             try {
               await updateDoc(doc(db, "users", user.id), { banned: true });
-              Alert.alert("🚫 User Banned", `${user.fullName} has been permanently banned.`);
+              Alert.alert("User Banned", `${user.fullName} has been permanently banned.`);
             } catch (err) {
               console.error(err);
               Alert.alert("Error", "Failed to ban user.");

@@ -22,7 +22,7 @@ export default function SearchUsers() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
 
-  // ✅ Fetch logged-in user's role
+  // Fetch logged-in user's role
   useEffect(() => {
     const fetchUserRole = async () => {
       const user = auth.currentUser;
@@ -37,7 +37,7 @@ export default function SearchUsers() {
     fetchUserRole();
   }, []);
 
-  // ✅ Auto-search when typing (debounced)
+  // Auto-search when typing (debounced)
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       if (search.trim().length > 0) handleSearch();
@@ -46,7 +46,7 @@ export default function SearchUsers() {
     return () => clearTimeout(delayDebounce);
   }, [search]);
 
-  // ✅ Perform search with role filtering
+  // Perform search with role filtering
   const handleSearch = async () => {
     if (!search.trim()) return;
     setLoading(true);
@@ -82,7 +82,7 @@ export default function SearchUsers() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 🔹 Sticky Header with Back Button + Search */}
+      {/* Sticky Header with Back Button + Search */}
       <View style={styles.stickyHeader}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -90,7 +90,7 @@ export default function SearchUsers() {
         <Text style={styles.headerTitle}>Search Users</Text>
       </View>
 
-      {/* 🔹 Search Bar */}
+      {/* Search Bar */}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color="#1E88E5" />
@@ -104,10 +104,10 @@ export default function SearchUsers() {
         </View>
       </View>
 
-      {/* 🔹 Loading Spinner */}
+      {/* Loading Spinner */}
       {loading && <ActivityIndicator size="large" color="#1E88E5" style={{ marginTop: 20 }} />}
 
-      {/* 🔹 Results List */}
+      {/* Results List */}
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
@@ -128,9 +128,9 @@ export default function SearchUsers() {
               <Text style={styles.name}>{item.fullName}</Text>
               <Text style={styles.role}>{item.userType}</Text>
               {item.verified ? (
-                <Text style={{ color: "#43A047", fontWeight: "600" }}>✅ Verified</Text>
+                <Text style={{ color: "#43A047", fontWeight: "600" }}>Verified</Text>
               ) : (
-                <Text style={{ color: "#E53935", fontWeight: "600" }}>❌ Not Verified</Text>
+                <Text style={{ color: "#E53935", fontWeight: "600" }}>Not Verified</Text>
               )}
             </View>
           </TouchableOpacity>
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A8C2A",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    paddingTop: 40,
+    paddingTop: 20,
   },
   backButton: { marginRight: 10 },
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#fff" },
