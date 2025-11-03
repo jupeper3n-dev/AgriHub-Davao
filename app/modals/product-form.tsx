@@ -13,9 +13,8 @@ import {
 } from "firebase/firestore";
 import {
   getDownloadURL,
-  getStorage,
   ref,
-  uploadBytes,
+  uploadBytes
 } from "firebase/storage";
 import React, { useEffect, useState } from "react";
 import {
@@ -29,9 +28,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../../firebaseConfig";
-
-const storage = getStorage();
+import { auth, db, storage } from "../../firebaseConfig";
 
 type Form = {
   title: string;
@@ -164,13 +161,25 @@ export default function ProductForm() {
 
   // Upload image if present
   const uploadImageIfAny = async (productId: string, uid: string) => {
-    const uri = imgLocalUri;
-    if (!uri) return form.imageUrl;
-    const resp = await fetch(uri);
-    const blob = await resp.blob();
-    const storageRef = ref(storage, `products/${uid}/${productId}.jpg`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
+    try {
+      if (!imgLocalUri) return form.imageUrl;
+
+      console.log("Uploading image:", imgLocalUri);
+      const response = await fetch(imgLocalUri);
+      const blob = await response.blob();
+
+      const storageRef = ref(storage, `products/${uid}/${productId}.jpg`);
+      await uploadBytes(storageRef, blob);
+
+      const downloadURL = await getDownloadURL(storageRef);
+      console.log("Final image URL:", downloadURL);
+
+      return downloadURL;
+    } catch (err) {
+      console.error("Upload failed:", err);
+      Alert.alert("Upload failed", "Unable to upload the image.");
+      return null;
+    }
   };
 
   // Save Product
@@ -255,7 +264,7 @@ export default function ProductForm() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{id ? "Edit Product" : "Add Product"}</Text>
+        <Text style={styles.headerTitle}>{id ? "Edit Product" : "Add Post"}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -274,7 +283,7 @@ export default function ProductForm() {
 
         {/* Card */}
         <View style={styles.card}>
-          <Text style={styles.label}>Product Title</Text>
+          <Text style={styles.label}>Post Title</Text>
           <TextInput
             style={styles.input}
             placeholder="Enter product name"

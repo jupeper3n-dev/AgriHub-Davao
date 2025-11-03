@@ -1,13 +1,32 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
+import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#1E88E5",
         headerShown: false,
+        tabBarActiveTintColor: "#1E88E5",
+        tabBarInactiveTintColor: "#777",
+        tabBarStyle: {
+          height: 60 + (Platform.OS === "ios" ? insets.bottom : 0), // ✅ consistent tab height
+          paddingBottom: Platform.OS === "ios" ? insets.bottom : 8,
+          paddingTop: 6,
+          backgroundColor: "#fff",
+          borderTopWidth: 1,
+          borderTopColor: "#ddd",
+          position: "absolute",
+          elevation: 6, // adds shadow on Android
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginBottom: 2,
+        },
       }}
     >
       {/* Dashboard Tab */}
@@ -32,7 +51,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Marketplace Tab */}
+      {/* Profile Tab */}
       <Tabs.Screen
         name="profile"
         options={{

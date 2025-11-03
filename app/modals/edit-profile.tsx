@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { updatePassword } from "firebase/auth";
@@ -30,9 +31,11 @@ export default function EditProfile() {
     password: "",
     photoURL: "",
   });
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [imgLocalUri, setImgLocalUri] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Load user profile
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -59,7 +62,6 @@ export default function EditProfile() {
     loadProfile();
   }, []);
 
-  // Pick Image
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -73,7 +75,6 @@ export default function EditProfile() {
     if (!result.canceled) setImgLocalUri(result.assets[0].uri);
   };
 
-  // Upload photo
   const uploadPhoto = async (uid: string) => {
     if (!imgLocalUri) return form.photoURL;
     const blob = await (await fetch(imgLocalUri)).blob();
@@ -82,13 +83,29 @@ export default function EditProfile() {
     return await getDownloadURL(storageRef);
   };
 
-  // Save profile
+  const isPasswordStrong = (pwd: string) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{10,}$/;
+    return regex.test(pwd);
+  };
+
   const saveProfile = async () => {
     try {
       const user = auth.currentUser;
       if (!user) return;
       if (!form.fullName.trim()) {
         return Alert.alert("Required", "Full name cannot be empty.");
+      }
+
+      if (form.password.trim().length > 0) {
+        if (!isPasswordStrong(form.password)) {
+          return Alert.alert(
+            "Weak Password",
+            "Password must be at least 10 characters long and include:\n• 1 uppercase letter\n• 1 lowercase letter\n• 1 number"
+          );
+        }
+        if (form.password !== confirmPassword) {
+          return Alert.alert("Password Mismatch", "Passwords do not match.");
+        }
       }
 
       setSaving(true);
@@ -101,12 +118,11 @@ export default function EditProfile() {
         photoURL: newPhotoURL,
       });
 
-      // ...
       if (form.password.trim().length > 0) {
         await updatePassword(user, form.password);
       }
 
-      Alert.alert("Success", "Profile updated successfully!");
+      Alert.alert("Success", "Profile updated successfully.");
       router.replace({
         pathname: "/(tabs)/profile",
         params: { refresh: "true" },
@@ -119,6 +135,20 @@ export default function EditProfile() {
     }
   };
 
+  const passwordMatchMessage =
+    confirmPassword.length > 0
+      ? form.password === confirmPassword
+        ? "Passwords match"
+        : "Passwords do not match"
+      : "";
+
+  const passwordMatchColor =
+    confirmPassword.length > 0
+      ? form.password === confirmPassword
+        ? "#4CAF50"
+        : "#E53935"
+      : "transparent";
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -129,18 +159,18 @@ export default function EditProfile() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
-      <Text style={styles.title}>Edit Profile ✏️</Text>
+      <Text style={styles.title}>Edit Profile</Text>
 
-      {/* Profile Picture */}
       <TouchableOpacity onPress={pickImage} style={styles.imageBox}>
         {imgLocalUri || form.photoURL ? (
           <Image source={{ uri: imgLocalUri || form.photoURL }} style={styles.avatar} />
         ) : (
-          <Text style={{ color: "#4A8C2A", fontWeight: "600" }}>+ Select Profile Picture</Text>
+          <Text style={{ color: "#4A8C2A", fontWeight: "600" }}>
+            + Select Profile Picture
+          </Text>
         )}
       </TouchableOpacity>
 
-      {/* Fields */}
       <TextInput
         style={styles.input}
         placeholder="Full Name"
@@ -159,15 +189,60 @@ export default function EditProfile() {
         value={form.address}
         onChangeText={(v) => setForm({ ...form, address: v })}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="New Password (optional)"
-        value={form.password}
-        secureTextEntry
-        onChangeText={(v) => setForm({ ...form, password: v })}
-      />
 
-      {/* Buttons */}
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.inputPassword}
+          placeholder="New Password (optional)"
+          value={form.password}
+          secureTextEntry={!showPassword}
+          onChangeText={(v) => setForm({ ...form, password: v })}
+        />
+        <TouchableOpacity
+          onPress={() => setShowPassword(!showPassword)}
+          style={styles.eyeButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={showPassword ? "eye" : "eye-off"}
+            size={22}
+            color={showPassword ? "#000" : "rgba(0,0,0,0.4)"}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={[
+            styles.inputPassword,
+            confirmPassword.length > 0 && form.password !== confirmPassword
+              ? { borderColor: "#E53935" }
+              : {},
+          ]}
+          placeholder="Confirm New Password"
+          value={confirmPassword}
+          secureTextEntry={!showConfirmPassword}
+          onChangeText={setConfirmPassword}
+        />
+        <TouchableOpacity
+          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          style={styles.eyeButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={showConfirmPassword ? "eye" : "eye-off"}
+            size={22}
+            color={showConfirmPassword ? "#000" : "rgba(0,0,0,0.4)"}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {confirmPassword.length > 0 && (
+        <Text style={[styles.matchText, { color: passwordMatchColor }]}>
+          {passwordMatchMessage}
+        </Text>
+      )}
+
       <TouchableOpacity
         style={[styles.saveBtn, saving && { opacity: 0.6 }]}
         onPress={saveProfile}
@@ -205,6 +280,34 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     fontSize: 16,
     backgroundColor: "#fff",
+  },
+  passwordContainer: {
+    width: "100%",
+    position: "relative",
+    marginBottom: 10,
+  },
+  inputPassword: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 10,
+    padding: 12,
+    paddingRight: 40,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    color: "#000",
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 10,
+    top: "50%",
+    transform: [{ translateY: -11 }],
+    padding: 0,
+  },
+  matchText: {
+    marginBottom: 10,
+    fontSize: 14,
+    fontWeight: "500",
   },
   saveBtn: {
     backgroundColor: "#4A8C2A",

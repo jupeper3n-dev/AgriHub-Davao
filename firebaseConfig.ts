@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { Firestore, getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // ✅ Import storage
 import { Platform } from "react-native";
 
 // Load config from app.json (under "extra.firebase")
@@ -17,22 +18,22 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 
-// Initialize app safely (only once)
+// Initialize app (only once)
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
 } else {
   app = getApp();
 }
 
-// Prevent "Expected a class definition" error by checking if Auth already exists
+// ✅ Initialize Auth safely for React Native + Web
 try {
   if (Platform.OS === "web") {
-    auth = getAuth(app); // Web auto-manages persistence
+    auth = getAuth(app);
   } else {
     auth =
       getAuth(app) ||
       initializeAuth(app, {
-        persistence: AsyncStorage as any, // fallback persistence
+        persistence: AsyncStorage as any,
       });
   }
 } catch (err: any) {
@@ -40,9 +41,9 @@ try {
   auth = getAuth(app);
 }
 
-// Firestore + Realtime Database
+// ✅ Firestore + Realtime DB + Storage
 const dbInstance = getFirestore(app);
 const rtdb = getDatabase(app);
+const storage = getStorage(app); // ✅ Add this line
 
-export { app, auth, dbInstance as db, rtdb };
-
+export { app, auth, dbInstance as db, rtdb, storage }; // ✅ Export storage

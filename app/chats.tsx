@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   collection,
@@ -211,6 +212,8 @@ export default function Chats() {
   // Format last seen
   const getLastSeenText = (timestamp: any) => {
     if (!timestamp) return "Offline";
+    const lastSeenDate =
+    timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     const diff = Date.now() - timestamp.toDate().getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "Just now";
@@ -235,6 +238,12 @@ export default function Chats() {
 
       {/* Sticky Header */}
       <View style={styles.headerBar}>
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/dashboard")}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={26} color="#fff" />
+        </TouchableOpacity>
         <Text style={styles.headerText}>Messages</Text>
       </View>
 
@@ -380,8 +389,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A8C2A",
     paddingVertical: 14,
     paddingHorizontal: 18,
-    alignItems: "flex-start",
-    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
     zIndex: 10,
     elevation: 3,
   },
@@ -466,4 +475,9 @@ const styles = StyleSheet.create({
   color: "#999",
   marginLeft: 8,
   },
+  backButton: {
+  marginRight: 10,
+  justifyContent: "center",
+  alignItems: "center",
+},
 });

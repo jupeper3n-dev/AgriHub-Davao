@@ -97,7 +97,7 @@ export default function LocationPicker() {
       <View style={styles.bottomContainer}>
         {selectedLocation ? (
           <Text style={styles.infoText}>
-            📍 You have selected:{" "}
+            You have selected:{" "}
             <Text style={{ fontWeight: "600" }}>
               {selectedLocation.latitude.toFixed(4)}, {selectedLocation.longitude.toFixed(4)}
             </Text>
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   },
   infoText: { color: "#333", marginBottom: 8, textAlign: "center" },
   confirmButton: {
-    backgroundColor: "#1E88E5",
+    backgroundColor: "#43A047",
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 8,

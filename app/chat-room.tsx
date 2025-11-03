@@ -146,48 +146,95 @@ export default function ChatRoom() {
   /** Messages listener + mark read **/
   useEffect(() => {
     if (!chatId) return;
+
     const currentUser = auth.currentUser;
-    if (!currentUser || !chatId) return;
+    if (!currentUser) return;
+
     const msgRef = collection(db, "chats", String(chatId), "messages");
     const q = query(msgRef, orderBy("createdAt", "asc"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list: any[] = [];
-        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-        setMessages(list);
-        setLoading(false);
-        // update chat's lastMessageAt in Firestore when a new message arrives
-        if (snap.docs.length > 0) {
-          const lastMsg = snap.docs[snap.docs.length - 1].data();
-          const chatRef = doc(db, "chats", String(chatId));
-          updateDoc(chatRef, {
-            lastMessageAt: lastMsg.createdAt || serverTimestamp(),
-            lastMessage: lastMsg.text || (lastMsg.imageUrl ? "[Image]" : ""),
-            lastSenderId: lastMsg.senderId,
+
+    console.log("Setting up Firestore listener for chat:", chatId);
+
+    // Wrap listener in try/catch to handle duplicate subscription errors gracefully
+    let unsub: (() => void) | null = null;
+
+    try {
+      unsub = onSnapshot(
+        q,
+        async (snap) => {
+          const list: any[] = [];
+          snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+          setMessages(list);
+          setLoading(false);
+
+          // ✅ Smooth scroll after layout
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100); // small delay to allow rendering before scroll
           });
-        }
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 300);
-        const markAsRead = async () => {
-          if (!me) return;
-          const chatRef = doc(db, "chats", String(chatId));
-          const chatSnap = await getDoc(chatRef);
-          if (chatSnap.exists()) {
-            const data = chatSnap.data() as any;
-            if (data.lastSenderId !== me.uid && data.lastMessageStatus !== "read") {
-              await updateDoc(chatRef, { lastMessageStatus: "read" });
+
+          // Update chat metadata only when new message arrives
+          if (snap.docs.length > 0) {
+            const lastMsg = snap.docs[snap.docs.length - 1].data();
+            const chatRef = doc(db, "chats", String(chatId));
+            try {
+              await updateDoc(chatRef, {
+                lastMessageAt: lastMsg.createdAt || serverTimestamp(),
+                lastMessage: lastMsg.text || (lastMsg.imageUrl ? "[Image]" : ""),
+                lastSenderId: lastMsg.senderId,
+              });
+            } catch (metaErr) {
+              console.warn("Skipped chat metadata update:", metaErr);
             }
           }
-        };
-        markAsRead();
-      },
-      (error) => {
-        console.error("Chat listener error:", error);
-        Alert.alert("Permission Error", "You don't have permission to read this chat.");
-        setLoading(false);
-      }
-    );
-    return () => unsub();
+
+          // Auto-scroll to bottom
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 300);
+
+          // Mark chat as read
+          if (me) {
+            const chatRef = doc(db, "chats", String(chatId));
+            const chatSnap = await getDoc(chatRef);
+            if (chatSnap.exists()) {
+              const data = chatSnap.data() as any;
+              if (data.lastSenderId !== me.uid && data.lastMessageStatus !== "read") {
+                await updateDoc(chatRef, { lastMessageStatus: "read" });
+              }
+            }
+          }
+        },
+        (error) => {
+          // Handle "already-exists" cleanly instead of crashing
+          console.error("Chat listener error:", {
+            code: (error as any)?.code,
+            message: (error as any)?.message,
+          });
+
+          if ((error as any)?.code === "already-exists") {
+            console.warn("Duplicate listener ignored — cleaning up...");
+            if (unsub) unsub();
+            return;
+          }
+
+          Alert.alert(
+            "Permission Error",
+            (error as any)?.code === "permission-denied"
+              ? "You don't have permission to read this chat."
+              : "Failed to load messages."
+          );
+          setLoading(false);
+        }
+      );
+    } catch (err) {
+      console.error("Listener setup failed:", err);
+    }
+
+    // Proper cleanup
+    return () => {
+      console.log("🧹 Unsubscribing chat listener:", chatId);
+      if (unsub) unsub();
+    };
   }, [chatId]);
 
   /** Send text message **/
@@ -249,15 +296,30 @@ export default function ChatRoom() {
 
   /** Upload to Storage + send as message **/
   const uploadAndSendImage = async (uri: string) => {
+    if (!me || !chatId) return;
+
     try {
       setUploading(true);
       setUploadProgress(0);
-      const response = await fetch(uri);
-      const blob = await response.blob();
+
+      console.log("📤 Upload start. uri:", uri);
+
+      // More reliable on Expo/Android
+      const res = await fetch(uri);
+      const blob = await res.blob();
+
+      // Try to infer content type (fallback to jpeg)
+      const contentType =
+        (blob as any)?.type && typeof (blob as any).type === "string"
+          ? (blob as any).type
+          : "image/jpeg";
+
       const storage = getStorage();
-      const fileName = `chats/${chatId}/${Date.now()}_${me?.uid}.jpg`;
-      const imageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(imageRef, blob);
+      const filePath = `chats/${chatId}/${Date.now()}_${me.uid}.jpg`;
+      const imageRef = ref(storage, filePath);
+
+      const uploadTask = uploadBytesResumable(imageRef, blob, { contentType });
+
       uploadTask.on(
         "state_changed",
         (snapshot) => {
@@ -265,35 +327,58 @@ export default function ChatRoom() {
           setUploadProgress(progress);
         },
         (error) => {
-          console.error("Upload failed:", error);
-          Alert.alert("Upload Error", "Failed to upload image.");
+          // Log everything we can about the failure
+          console.error("Storage upload error:", {
+            code: (error as any)?.code,
+            message: (error as any)?.message,
+            name: error?.name,
+          });
+          Alert.alert(
+            "Upload Error",
+            (error as any)?.code === "storage/unauthorized"
+              ? "You don't have permission to upload images."
+              : "Failed to upload image."
+          );
           setUploading(false);
         },
         async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await addDoc(collection(db, "chats", String(chatId), "messages"), {
-            senderId: me?.uid,
-            imageUrl: downloadURL,
-            text: "",
-            createdAt: serverTimestamp(),
-          });
-          const chatRef = doc(db, "chats", String(chatId));
-          await setDoc(
-            chatRef,
-            {
-              lastMessage: "[Image]",
-              lastSenderId: me?.uid,
-              lastMessageStatus: "delivered",
-              lastMessageAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-          setUploading(false);
-          setUploadProgress(0);
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log("Upload done. downloadURL:", downloadURL);
+
+            // write message
+            await addDoc(collection(db, "chats", String(chatId), "messages"), {
+              senderId: me.uid,
+              imageUrl: downloadURL,
+              text: "",
+              createdAt: serverTimestamp(),
+            });
+
+            // update chat summary
+            const chatRef = doc(db, "chats", String(chatId));
+            await setDoc(
+              chatRef,
+              {
+                lastMessage: "[Image]",
+                lastSenderId: me.uid,
+                lastMessageStatus: "delivered",
+                lastMessageAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+
+            setUploading(false);
+            setUploadProgress(0);
+          } catch (firestoreErr) {
+            console.error("Firestore write after upload failed:", firestoreErr);
+            Alert.alert("Error", "Image uploaded, but sending message failed.");
+            setUploading(false);
+          }
         }
       );
     } catch (err) {
-      console.error("Send image error:", err);
+      console.error("Unexpected upload error:", err);
       Alert.alert("Error", "Failed to send image.");
       setUploading(false);
     }
@@ -369,8 +454,20 @@ export default function ChatRoom() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{userName}</Text>
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (uid) {
+              router.push({ pathname: "/profile-view", params: { uid } });
+            } else {
+              console.warn("No user ID found for chat participant");
+            }
+          }}
+        >
+          <Text style={[styles.title]}>
+            {userName}
+          </Text>
           {userStatus ? (
             <Text style={styles.statusText}>
               {userStatus.isOnline
@@ -380,7 +477,7 @@ export default function ChatRoom() {
           ) : (
             <Text style={styles.statusText}>⚪ Offline</Text>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Chat body */}
@@ -444,7 +541,23 @@ export default function ChatRoom() {
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </SafeAreaView>{fullscreenImage && (
+        <View style={styles.modalContainer}>
+          <TouchableOpacity
+            style={styles.closeArea}
+            onPress={() => setFullscreenImage(null)}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="close" size={36} color="#fff" style={styles.closeIcon} />
+          </TouchableOpacity>
+
+          <Image
+            source={{ uri: fullscreenImage }}
+            style={styles.modalImage}
+            resizeMode="contain"
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -561,5 +674,27 @@ const styles = StyleSheet.create({
   fullscreenImage: {
     width: "100%",
     height: "100%",
+  },modalContainer: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.95)",
+  justifyContent: "center",
+  alignItems: "center",
+  zIndex: 1000,
+  },modalImage: {
+    width: "100%",
+    height: "100%",
+  },closeArea: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    zIndex: 2,
+  },closeIcon: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 20,
+    padding: 6,
   },
 });

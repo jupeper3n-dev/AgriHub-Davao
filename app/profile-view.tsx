@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -19,9 +20,11 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   Modal,
+  Pressable,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
@@ -32,15 +35,74 @@ import {
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
+  const SaveButton = ({ isSaved, onPress }: { isSaved: boolean; onPress: () => void }) => {
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.85,
+        useNativeDriver: true,
+        speed: 30,
+      }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={({ pressed }) => [
+          {
+            justifyContent: "center",
+            alignItems: "center",
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: pressed ? "rgba(0,0,0,0.05)" : "transparent",
+          },
+        ]}
+      >
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          {/* Outline behind the filled icon */}
+          {!isSaved && (
+            <Ionicons
+              name="bookmark-outline"
+              size={28}
+              color="#000"
+              style={{ position: "absolute" }}
+            />
+          )}
+
+          {/* Filled color icon */}
+          <Ionicons
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={26}
+            color={isSaved ? "#4A8C2A" : "#fff"}
+          />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
 export default function ProfileView() {
   const { userId: rawParam, uid } = useLocalSearchParams();
   const router = useRouter();
   const userId = Array.isArray(rawParam) ? rawParam[0] : rawParam || uid;
-
+  const [showAllPosts, setShowAllPosts] = useState(false);
   const [userInfo, setUserInfo] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
@@ -50,6 +112,8 @@ export default function ProfileView() {
   const [hasReported, setHasReported] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const onRefresh = async () => {
     if (!userId) return;
@@ -332,6 +396,7 @@ export default function ProfileView() {
   const renderPost = ({ item }: { item: any }) => {
     const user = auth.currentUser;
     const liked = item.likes?.includes(user?.uid);
+    const isSaved = savedPostIds.includes(item.id);
 
     const toggleReaction = async () => {
       try {
@@ -359,7 +424,7 @@ export default function ProfileView() {
         } else {
           Alert.alert("Link copied!", link);
         }
-      } catch (err: any) {
+      } catch {
         Alert.alert("Error", "Failed to share product link.");
       }
     };
@@ -369,19 +434,20 @@ export default function ProfileView() {
         Alert.alert("Login Required", "You must log in to save posts.");
         return;
       }
+
       try {
-        const q = query(
-          collection(db, "saved_posts", user.uid, "posts"),
-          where("postId", "==", item.id)
-        );
+        const postRef = collection(db, "saved_posts", user.uid, "posts");
+        const q = query(postRef, where("postId", "==", item.id));
         const snap = await getDocs(q);
+
         if (!snap.empty) {
-          snap.forEach(async (d) => {
-            await deleteDoc(doc(db, "saved_posts", user.uid, "posts", d.id));
-          });
-          Alert.alert("Removed", "Post unsaved.");
+          // unsave post
+          snap.forEach(async (d) => await deleteDoc(doc(postRef, d.id)));
+          setSavedPostIds((prev) => prev.filter((id) => id !== item.id));
+          Alert.alert("Removed", "Post removed from your saved list.");
         } else {
-          await addDoc(collection(db, "saved_posts", user.uid, "posts"), {
+          // save post
+          await addDoc(postRef, {
             userId: user.uid,
             postId: item.id,
             title: item.title || "Untitled Product",
@@ -392,39 +458,63 @@ export default function ProfileView() {
             description: item.description || "",
             createdAt: new Date(),
           });
-          Alert.alert("Saved", "Post added to your saved list!");
+          setSavedPostIds((prev) => [...prev, item.id]);
+          Alert.alert("Saved", "Added to your saved posts!");
         }
-      } catch (err: any) {
+      } catch (err) {
+        console.error("Save post error:", err);
         Alert.alert("Error", "Unable to save post.");
       }
     };
 
     return (
       <View style={styles.card}>
-        <Text style={styles.posterName}>
-          Posted by{" "}
-          <Text style={{ fontWeight: "bold", color: "#1E88E5" }}>
-            {item.userName || "Unknown User"}
-          </Text>{" "}
-          • {getTimeAgo(item.createdAt)}
-        </Text>
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/profile-view",
+                params: { uid: item.userId },
+              })
+            }
+            style={{ flex: 1 }}
+          >
+            <Text style={styles.posterName}>Posted by {item.userName || "Unknown User"}</Text>
+          </TouchableOpacity>
+          <SaveButton isSaved={isSaved} onPress={() => handleSave()} />
+        </View>
 
+        {item.createdAt && (
+          <Text style={styles.timeText}>
+            {getTimeAgo(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt)}
+          </Text>
+        )}
+
+        {/* Image */}
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              setSelectedImage(item.imageUrl);
+              setImageModalVisible(true);
+            }}
+          >
+            <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          </TouchableOpacity>
         ) : (
           <View style={styles.imagePlaceholder}>
             <Text style={{ color: "#aaa" }}>No Image</Text>
           </View>
         )}
 
+        {/* Info */}
         <View style={styles.infoRow}>
           <Text style={styles.infoText}>
             <Text style={styles.label}>Product:</Text> {item.title} {" | "}
             <Text style={styles.label}>Category:</Text> {item.category} {" | "}
             <Text style={styles.label}>Price:</Text>{" "}
-            <Text style={{ color: "#43A047", fontWeight: "bold" }}>
-              ₱ {item.price}
-            </Text>
+            <Text style={{ color: "#43A047", fontWeight: "bold" }}>₱ {item.price}</Text>
           </Text>
         </View>
 
@@ -435,32 +525,54 @@ export default function ProfileView() {
           </View>
         ) : null}
 
+        {/* Actions */}
         <View style={styles.actionsRow}>
-          <TouchableOpacity onPress={toggleReaction}>
-            <Text style={[styles.iconText, liked && { color: "#E91E63" }]}>
-              ❤️ {item.likes?.length || 0}
-            </Text>
+          {/* Like */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.7}
+            onPress={toggleReaction}
+          >
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#E91E63" : "#000"}
+              style={styles.iconShadow}
+            />
+            <Text style={styles.iconLabel}>{item.likes?.length || 0}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleComments}>
-            <Text style={styles.iconText}>💬 Comment</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleShare}>
-            <Text style={styles.iconText}>📤 Share</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleSave}>
-            <Text style={styles.iconText}>🔖 Save</Text>
+          {/* Comment */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.7}
+            onPress={handleComments}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={22}
+              color="#000"
+              style={styles.iconShadow}
+            />
+            <Text style={styles.iconLabel}>Comment</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Details */}
         <TouchableOpacity
           style={styles.detailsBtn}
           onPress={() =>
             router.push({
               pathname: "/modals/product-details",
-              params: item,
+              params: {
+                ...item,
+                imageUrl:
+                  typeof item.imageUrl === "string"
+                    ? item.imageUrl
+                    : Array.isArray(item.imageUrl)
+                    ? item.imageUrl[0]
+                    : (item.imageUrl as any)?.uri || "",
+              },
             })
           }
         >
@@ -489,9 +601,10 @@ export default function ProfileView() {
         </View>
       </Modal>
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Text style={{ color: "#1E88E5", fontSize: 16 }}>← Back</Text>
-      </TouchableOpacity>
+    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+      <Ionicons name="arrow-back" size={24} color="#4A8C2A" style={{ marginRight: 6 }} />
+      <Text style={styles.backText}>Back</Text>
+    </TouchableOpacity>
 
       {userInfo && (
         <View style={styles.profileHeader}>
@@ -622,23 +735,64 @@ export default function ProfileView() {
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>Posts by this user</Text>
+        {showAllPosts ? (
+          // 🔹 Full-screen expanded posts view
+          <Modal visible={showAllPosts} animationType="slide" transparent={false}>
+            <SafeAreaView style={styles.fullscreenContainer}>
+              <View style={styles.fullscreenHeader}>
+                <Text style={styles.fullscreenTitle}>All Posts by {userInfo?.fullName || "User"}</Text>
+                <TouchableOpacity onPress={() => setShowAllPosts(false)}>
+                  <Ionicons name="close" size={28} color="#fff" />
+                </TouchableOpacity>
+              </View>
 
-      {loadingPosts ? (
-        <ActivityIndicator color="#1E88E5" />
-      ) : posts.length === 0 ? (
-        <Text style={styles.noPosts}>No posts available.</Text>
-      ) : (
-      <FlatList
-        data={posts}
-        keyExtractor={(item) => item.id}
-        renderItem={renderPost}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      />
-      )}
+              {loadingPosts ? (
+                <ActivityIndicator color="#4A8C2A" style={{ marginTop: 20 }} />
+              ) : posts.length === 0 ? (
+                <Text style={styles.noPosts}>No posts available.</Text>
+              ) : (
+                <FlatList
+                  data={posts}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderPost}
+                  contentContainerStyle={{ paddingBottom: 80, padding: 10 }}
+                  refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                  }
+                />
+              )}
+            </SafeAreaView>
+          </Modal>
+        ) : (
+          // 🔹 Regular compact section
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Posts by this user</Text>
+
+              {!showAllPosts && posts.length > 0 && (
+                <TouchableOpacity
+                  style={styles.seeAllButton}
+                  onPress={() => setShowAllPosts(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.seeAllText}>See All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {loadingPosts ? (
+              <ActivityIndicator color="#4A8C2A" />
+            ) : posts.length === 0 ? (
+              <Text style={styles.noPosts}>No posts available.</Text>
+            ) : (
+              <FlatList
+                data={posts.slice(0, 3)} // show only top 3 posts here
+                keyExtractor={(item) => item.id}
+                renderItem={renderPost}
+                contentContainerStyle={{ paddingBottom: 60 }}
+              />
+            )}
+          </>
+)}
 
         <Modal visible={reportModalVisible} transparent animationType="slide">
       <View style={styles.modalOverlay}>
@@ -678,13 +832,36 @@ export default function ProfileView() {
         </View>
       </View>
     </Modal>
+    <Modal visible={imageModalVisible} transparent animationType="fade">
+      <View style={styles.modalBackground}>
+        {selectedImage && (
+          <>
+            <Image
+              source={{ uri: selectedImage }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+
+            {/* ✅ Close Button */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setImageModalVisible(false)}
+            >
+              <Ionicons name="close-circle" size={40} color="#fff" />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", padding: 16 },
-  backBtn: { marginBottom: 10 },
+  backBtn: {   flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 10,},
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
   loadingOverlay: {
@@ -752,83 +929,169 @@ const styles = StyleSheet.create({
   msgText: { color: "#1E88E5", fontWeight: "600" },
   actionRow: { flexDirection: "row", marginTop: 10 },
 
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
-
-  card: {
-    backgroundColor: "#f9f9f9",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 20 },
+card: {
+  backgroundColor: "#fff",
+  padding: 14,
+  borderRadius: 12,
+  marginBottom: 14,
+  shadowColor: "#000",
+  shadowOpacity: 0.08,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 3,
   },
-  posterName: { fontSize: 14, marginBottom: 6, color: "#555" },
-  image: { width: "100%", height: 180, borderRadius: 8, marginBottom: 8 },
+  posterName: { fontSize: 18, color: "#4A8C2A", fontWeight: "bold" },
+  timeText: { fontSize: 13, color: "#777", marginBottom: 8 },
+  image: { width: "100%", height: 220, borderRadius: 8, marginBottom: 12 },
   imagePlaceholder: {
     width: "100%",
     height: 180,
-    backgroundColor: "#eee",
     borderRadius: 8,
+    backgroundColor: "#eee",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   infoRow: { marginBottom: 6 },
-  infoText: { color: "#444" },
+  infoText: { fontSize: 16, color: "#000" },
   label: { fontWeight: "bold", color: "#000" },
-  descriptionBox: { marginBottom: 6 },
-  description: { color: "#555" },
+  descriptionBox: { marginTop: 8, marginBottom: 8 },
+  description: { color: "#000", fontSize: 16, lineHeight: 20 },
   actionsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 50,
     marginTop: 8,
   },
-  iconText: { color: "#444" },
+  iconButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "column",
+    paddingHorizontal: 8,
+  },
+  iconLabel: {
+    color: "#000",
+    fontSize: 13,
+    marginTop: 3,
+    textAlign: "center",
+  },
   detailsBtn: {
-    marginTop: 8,
-    backgroundColor: "#1E88E5",
-    padding: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#4A8C2A",
+    paddingVertical: 8,
     borderRadius: 6,
     alignItems: "center",
+    marginTop: 20,
   },
-  detailsText: { color: "#fff", fontWeight: "bold" },
-  noPosts: { textAlign: "center", color: "#888", marginTop: 20 },
+  detailsText: { color: "#000", fontWeight: "bold" },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalBox: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    width: "85%",
+  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 10,
+    height: 100,
+    textAlignVertical: "top",
+    marginBottom: 10,
+  },
+  modalButtons: { flexDirection: "row", justifyContent: "space-between" },
+  modalBtn: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 5,
+  },
+  modalBtnText: { color: "#fff", fontWeight: "bold" },
   rateRow: {
   flexDirection: "row",
   alignItems: "center",
   marginTop: 8,
-},
-modalOverlay: {
+  },noPosts: {
+    textAlign: "center",
+    color: "#888",
+    marginTop: 20,
+  },iconShadow: {
+  shadowColor: "#000",
+  shadowOpacity: 0.3,
+  shadowRadius: 2,
+  shadowOffset: { width: 1, height: 1 },
+  elevation: 3, // Android shadow
+  },seeAllButton: {
+  alignSelf: "center",
+  backgroundColor: "#4A8C2A",
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+  borderRadius: 25,
+  marginBottom: 15,
+  },
+  seeAllText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },fullscreenContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  fullscreenHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+    backgroundColor: "#4A8C2A",
+  },
+  fullscreenTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+  },sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },backText: {
+  color: "#4A8C2A",
+  fontSize: 18,
+  fontWeight: "600",
+  },modalBackground: {
   flex: 1,
+  backgroundColor: "rgba(0,0,0,0.95)",
   justifyContent: "center",
   alignItems: "center",
-  backgroundColor: "rgba(0,0,0,0.5)",
 },
-modalBox: {
-  backgroundColor: "#fff",
-  padding: 20,
-  borderRadius: 10,
-  width: "85%",
+fullImage: {
+  width: "100%",
+  height: "100%",
 },
-modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
-modalInput: {
-  borderWidth: 1,
-  borderColor: "#ccc",
-  borderRadius: 8,
-  padding: 10,
-  height: 100,
-  textAlignVertical: "top",
-  marginBottom: 10,
+closeButton: {
+  position: "absolute",
+  top: 50,
+  right: 20,
+  zIndex: 10,
+  backgroundColor: "rgba(0,0,0,0.4)",
+  borderRadius: 20,
+  padding: 5,
 },
-modalButtons: { flexDirection: "row", justifyContent: "space-between" },
-modalBtn: {
-  flex: 1,
-  padding: 10,
-  borderRadius: 8,
-  alignItems: "center",
-  marginHorizontal: 5,
-},
-modalBtnText: { color: "#fff", fontWeight: "bold" },
 });

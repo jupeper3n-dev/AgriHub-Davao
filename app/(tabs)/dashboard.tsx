@@ -1,7 +1,8 @@
+// Replaces the Share button with a Chat button
+// Redirects to the Chat Room with the post owner's userId
+
 import { Ionicons } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
 import {
   addDoc,
   collection,
@@ -11,29 +12,34 @@ import {
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
   updateDoc,
-  where
+  where,
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Image,
+  Modal,
+  Pressable,
   RefreshControl,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth, db } from "../../firebaseConfig";
 
 const { width } = Dimensions.get("window");
 
-// Utility: format "X minutes ago"
 function getTimeAgo(date: Date): string {
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
@@ -57,6 +63,61 @@ function getTimeAgo(date: Date): string {
   return "Posted just now";
 }
 
+  const SaveButton = ({ isSaved, onPress }: { isSaved: boolean; onPress: () => void }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.85,
+        useNativeDriver: true,
+        speed: 30,
+      }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={({ pressed }) => [
+          {
+            justifyContent: "center",
+            alignItems: "center",
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: pressed ? "rgba(0,0,0,0.05)" : "transparent",
+          },
+        ]}
+      >
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          {!isSaved && (
+            <Ionicons
+              name="bookmark-outline"
+              size={28}
+              color="#000"
+              style={{ position: "absolute" }}
+            />
+          )}
+          <Ionicons
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={26}
+            color={isSaved ? "#4A8C2A" : "#fff"}
+          />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
 export default function DashboardScreen() {
   const [products, setProducts] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
@@ -67,8 +128,10 @@ export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState("Home");
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
-  // Load user type
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -79,19 +142,17 @@ export default function DashboardScreen() {
       const role = snap.data().userType || "Store Owner";
       setUserRole(role);
 
-      // Only redirect once everything is settled
       setTimeout(() => {
         if (role === "Admin") {
           console.log("Admin detected, redirecting to admin panel...");
           router.replace("../admin-panel");
         }
-      }, 300); // wait a tiny bit for auth state to settle
+      }, 300);
     });
 
     return () => unsub();
   }, []);
 
-  // Load posts based on role
   useEffect(() => {
     if (!userRole) return;
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
@@ -100,18 +161,12 @@ export default function DashboardScreen() {
       snap.forEach((doc) => allItems.push({ id: doc.id, ...doc.data() }));
 
       let visiblePosts = allItems;
-
-      // Restrict what each role can see
       if (userRole?.toLowerCase() === "farmer" || userRole?.toLowerCase() === "consumer") {
         visiblePosts = allItems.filter(
           (p) => (p.category || "").toLowerCase() === "store owner"
         );
-      } else if (userRole?.toLowerCase() === "store owner") {
-        // Store owners see everything (optional: include only valid posts)
-        visiblePosts = allItems;
       }
 
-      // Hide your own posts
       const currentUid = auth.currentUser?.uid;
       visiblePosts = visiblePosts.filter((p) => p.userId !== currentUid);
 
@@ -123,7 +178,6 @@ export default function DashboardScreen() {
     return () => unsub();
   }, [userRole]);
 
-  // Real-time sync for saved posts
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -143,19 +197,14 @@ export default function DashboardScreen() {
     setTimeout(() => setRefreshing(false), 800);
   }, []);
 
-  // Permission check
   const canInteractWith = (targetUserType: string): boolean => {
     const target = (targetUserType || "").toLowerCase();
-
     if (userRole === "farmer" || userRole === "consumer") {
       return target === "store owner";
     }
-
-    // Store Owners can interact with anyone
     return true;
   };
 
-  // Like post
   const toggleReaction = async (item: any) => {
     if (!canInteractWith(item.category)) {
       Alert.alert("Access Denied", "You cannot like this post.");
@@ -180,28 +229,6 @@ export default function DashboardScreen() {
     }
   };
 
-  // Share post
-  const handleShare = async (item: any) => {
-    if (!canInteractWith(item.category)) {
-      Alert.alert("Access Denied", "You cannot share this post.");
-      return;
-    }
-
-    try {
-      const link = `https://geo-davao.app/product?id=${item.id}`;
-      await Clipboard.setStringAsync(link);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(link);
-      } else {
-        Alert.alert("Link copied!", link);
-      }
-    } catch (err: any) {
-      console.error("Share error:", err);
-      Alert.alert("Error", "Failed to share product link.");
-    }
-  };
-
-  // Comment post
   const handleComments = (item: any) => {
     if (!canInteractWith(item.category)) {
       Alert.alert("Access Denied", "You cannot comment on this post.");
@@ -210,7 +237,6 @@ export default function DashboardScreen() {
     router.push({ pathname: "/modals/comments", params: { productId: item.id } });
   };
 
-  // Save/Unsave Post
   const handleSavePost = async (item: any) => {
     const user = auth.currentUser;
     if (!user) {
@@ -252,102 +278,189 @@ export default function DashboardScreen() {
     }
   };
 
-  // Render Post
-  const renderPost = ({ item }: { item: any }) => {
-    const user = auth.currentUser;
-    const liked = item.likes?.includes(user?.uid);
-    const isSaved = savedPosts.includes(item.id);
+  // Open chat with the user who posted
+  const handleChat = async (item: any) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert("Login Required", "You must be logged in to send messages.");
+      return;
+    }
 
-    return (
-      <View style={styles.card}>
-        {/* 🔹 Poster Info */}
-        <TouchableOpacity
-          onPress={() =>
-            router.push({
-              pathname: "/profile-view",
-              params: { uid: item.userId },
-            })
-          }
-        >
-          <Text style={styles.posterName}>Posted by {item.userName || "Unknown User"}</Text>
-        </TouchableOpacity>
+    if (!item.userId) {
+      Alert.alert("Error", "This post's user ID is missing.");
+      return;
+    }
 
-        {item.createdAt && (
-          <Text style={styles.timeText}>
-            {getTimeAgo(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt)}
-          </Text>
-        )}
+    if (item.userId === currentUser.uid) {
+      Alert.alert("Notice", "You can’t message yourself.");
+      return;
+    }
 
-        {/* 🔹 Image */}
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.image} />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Text style={{ color: "#aaa" }}>No Image</Text>
-          </View>
-        )}
+    try {
+      const me = currentUser.uid;
+      const them = String(item.userId);
+      const chatId = [me, them].sort().join("_");
 
-        {/* 🔹 Info */}
-        <View style={styles.infoRow}>
-          <Text style={styles.infoText}>
-            <Text style={styles.label}>Product:</Text> {item.title} {" | "}
-            <Text style={styles.label}>Category:</Text> {item.category} {" | "}
-            <Text style={styles.label}>Price:</Text>{" "}
-            <Text style={{ color: "#43A047", fontWeight: "bold" }}>
-              ₱ {item.price}
-            </Text>
-          </Text>
-        </View>
+      // Show a temporary loading overlay if you like (optional)
+      setLoading(true);
 
-        {item.description ? (
-          <View style={styles.descriptionBox}>
-            <Text style={styles.label}>Description:</Text>
-            <Text style={styles.description}>{item.description}</Text>
-          </View>
-        ) : null}
+      const chatRef = doc(db, "chats", chatId);
+      await setDoc(
+        chatRef,
+        {
+          members: [me, them],
+          lastMessage: "",
+          lastSenderId: "",
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-        {/* 🔹 Actions */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity onPress={() => toggleReaction(item)}>
-            <Text style={[styles.iconText, liked && { color: "#E91E63" }]}>
-              ❤️ {item.likes?.length || 0}
-            </Text>
-          </TouchableOpacity>
+      setLoading(false);
 
-          <TouchableOpacity onPress={() => handleComments(item)}>
-            <Text style={styles.iconText}>💬 Comment</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => handleShare(item)}>
-            <Text style={styles.iconText}>📤 Share</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => handleSavePost(item)}>
-            <Text
-              style={[
-                styles.iconText,
-                { color: isSaved ? "#E53935" : "#1E88E5" },
-              ]}
-            >
-              {isSaved ? "❌ Unsave" : "🔖 Save"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 🔹 Details */}
-        <TouchableOpacity
-          style={styles.detailsBtn}
-          onPress={() =>
-            router.push({ pathname: "/modals/product-details", params: item })
-          }
-        >
-          <Text style={styles.detailsText}>View Details</Text>
-        </TouchableOpacity>
-      </View>
-    );
+      router.push({
+        pathname: "/chat-room",
+        params: { chatId, uid: them },
+      });
+    } catch (err) {
+      console.error("Start chat error:", err);
+      setLoading(false);
+      Alert.alert("Error", "Failed to open chat.");
+    }
   };
 
-  // Loading state
+    // Inside renderPost():
+    const renderPost = ({ item }: { item: any }) => {
+      const user = auth.currentUser;
+      const liked = item.likes?.includes(user?.uid);
+      const isSaved = savedPosts.includes(item.id);
+
+      return (
+        <View style={styles.card}>
+          {/* Header Row: Poster Info + Save Icon */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/profile-view",
+                  params: { uid: item.userId },
+                })
+              }
+              style={{ flex: 1 }}
+            >
+              <Text style={styles.posterName}>Posted by {item.userName || "Unknown User"}</Text>
+            </TouchableOpacity>
+
+            <SaveButton isSaved={isSaved} onPress={() => handleSavePost(item)} />
+          </View>
+
+          {item.createdAt && (
+            <Text style={styles.timeText}>
+              {getTimeAgo(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt)}
+            </Text>
+          )}
+
+          {/* Image */}
+          {item.imageUrl ? (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => {
+                setSelectedImage(item.imageUrl);
+                setImageModalVisible(true);
+              }}
+            >
+              <Image source={{ uri: item.imageUrl }} style={styles.image} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Text style={{ color: "#aaa" }}>No Image</Text>
+            </View>
+          )}
+
+          {/* Product Info */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoText}>
+              <Text style={styles.label}>Product:</Text> {item.title} {" | "}
+              <Text style={styles.label}>Category:</Text> {item.category} {" | "}
+              <Text style={styles.label}>Price:</Text>{" "}
+              <Text style={{ color: "#43A047", fontWeight: "bold" }}>₱ {item.price}</Text>
+            </Text>
+          </View>
+
+          {/* Description */}
+          {item.description ? (
+            <View style={styles.descriptionBox}>
+              <Text style={styles.label}>Description:</Text>
+              <Text style={styles.description}>{item.description}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.actionsRow}>
+            {/* Like */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => toggleReaction(item)}
+            >
+              <Ionicons
+                name={liked ? "heart" : "heart-outline"}
+                size={22}
+                color={liked ? "#E91E63" : "#000"}
+                style={styles.iconShadow}
+              />
+              <Text style={styles.iconLabel}>{item.likes?.length || 0}</Text>
+            </TouchableOpacity>
+
+            {/* Comment */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => handleComments(item)}
+            >
+              <Ionicons
+                name="chatbubble-outline"
+                size={22}
+                color="#000"
+                style={styles.iconShadow}
+              />
+              <Text style={styles.iconLabel}>Comment</Text>
+            </TouchableOpacity>
+
+            {/* Chat */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => handleChat(item)}
+            >
+              <Ionicons
+                name="send-outline"
+                size={22}
+                color="#000"
+                style={styles.iconShadow}
+              />
+              <Text style={styles.iconLabel}>Chat</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* View Details BELOW */}
+          <TouchableOpacity
+            style={styles.detailsBtn}
+            onPress={() =>
+            router.push({
+              pathname: "/modals/product-details",
+              params: { ...item, imageUrl: item.imageUrl },
+            })
+            }
+          >
+            <Text style={styles.detailsText}>View Details</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
+// ...rest of your DashboardScreen component (unchanged)...
+
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -357,20 +470,17 @@ export default function DashboardScreen() {
     );
   }
 
-  // Main Render
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E88E5" />
-
-      {/* Top Navbar */}
       <View style={styles.topBar}>
-                <View style={styles.brandContainer}>
-                  <Image
-                    source={require("@/assets/images/agrihub-davao-logo.png")}
-                    style={styles.logo}
-                  />
-                  <Text style={styles.navTitle}>Admin Panel</Text>
-                </View>
+        <View style={styles.brandContainer}>
+          <Image
+            source={require("@/assets/images/agrihub-davao-logo.png")}
+            style={styles.logo}
+          />
+          <Text style={styles.navTitle}>AgriHub Davao</Text>
+        </View>
         <TouchableOpacity onPress={() => router.push("/search-users")}>
           <Ionicons name="search" size={24} color="#fff" />
         </TouchableOpacity>
@@ -382,9 +492,7 @@ export default function DashboardScreen() {
             key={tab}
             style={[styles.navItem, activeTab === tab && styles.navItemActive]}
             onPress={() =>
-              tab === "Messages"
-                ? router.push("../chats")
-                : setActiveTab(tab)
+              tab === "Messages" ? router.push("../chats") : setActiveTab(tab)
             }
           >
             <Text
@@ -395,35 +503,49 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         ))}
       </View>
-
-      {/* Posts */}
+      
       <View style={styles.container}>
-        <Text style={styles.title}>Community Posts</Text>
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           renderItem={renderPost}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <Text style={styles.empty}>No posts available.</Text>
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={<Text style={styles.empty}>No posts available.</Text>}
           contentContainerStyle={{ paddingBottom: 50 }}
         />
       </View>
-        {/* Add Product Button — Only for Store Owners or Farmers */}
-        {(userRole === "Store Owner" || userRole === "Farmer") && (
-          <View style={styles.addButtonContainer}>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => router.push("/modals/product-form")}
-            >
-              <Ionicons name="add-circle-outline" size={24} color="#fff" />
-              <Text style={styles.addButtonText}>Add Product</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+
+      {(userRole === "Store Owner" || userRole === "Farmer") && (
+      <View style={[styles.addButtonContainer, { bottom: 20 + insets.bottom }]}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => router.push("/modals/product-form")}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#fff" />
+          <Text style={styles.addButtonText}>Add a Post</Text>
+        </TouchableOpacity>
+      </View>
+      )}
+
+      <Modal visible={imageModalVisible} transparent animationType="fade">
+        <View style={styles.modalBackground}>
+          <TouchableOpacity
+            style={styles.closeArea}
+            activeOpacity={1}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <Ionicons name="close" size={36} color="#fff" style={styles.closeIcon} />
+          </TouchableOpacity>
+
+          {selectedImage && (
+            <Image
+              source={{ uri: selectedImage }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -451,7 +573,13 @@ const styles = StyleSheet.create({
   navText: { color: "#fff", fontSize: 16, fontWeight: "500" },
   navTextActive: { fontWeight: "bold", color: "#000" },
   container: { flex: 1, backgroundColor: "#f9f9f9", padding: 10 },
-  title: { fontSize: 30, fontWeight: "bold", marginBottom: 20, marginTop: 10, marginLeft: 10,},
+  title: {
+    fontSize: 30,
+    fontWeight: "bold",
+    marginBottom: 20,
+    marginTop: 10,
+    marginLeft: 10,
+  },
   card: {
     backgroundColor: "#fff",
     padding: 14,
@@ -463,7 +591,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  posterName: { fontSize: 18, color: "#1E88E5", fontWeight: "bold" },
+  posterName: { fontSize: 18, color: "#4A8C2A", fontWeight: "bold" },
   timeText: { fontSize: 13, color: "#777", marginBottom: 8 },
   image: { width: "100%", height: 220, borderRadius: 8, marginBottom: 12 },
   imagePlaceholder: {
@@ -492,45 +620,95 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   detailsBtn: {
-    backgroundColor: "#1E88E5",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#4A8C2A",
     paddingVertical: 8,
     borderRadius: 6,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 20,
   },
-  detailsText: { color: "#fff", fontWeight: "bold" },
+  detailsText: { color: "#000", fontWeight: "bold" },
   empty: { textAlign: "center", color: "#999", marginTop: 40 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   addButtonContainer: {
-  position: "absolute",
-  bottom: 20,
-  left: 0,
-  right: 0,
-  paddingHorizontal: 20,
-  alignItems: "center",
-},
-addButton: {
-  flexDirection: "row",
-  justifyContent: "center",
-  alignItems: "center",
-  backgroundColor: "#43A047",
-  paddingVertical: 14,
-  borderRadius: 10,
-  width: "100%",
-  elevation: 3,
-},
-addButtonText: {
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: 18,
-  marginLeft: 8,
-},  logo: {
+    position: "absolute",
+    bottom: 20,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  addButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#43A047",
+    paddingVertical: 14,
+    borderRadius: 10,
+    width: "100%",
+    elevation: 3,
+  },
+  addButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  logo: {
     width: width * 0.12,
     height: width * 0.12,
     resizeMode: "contain",
-  },  brandContainer: {
+  },
+  brandContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: width * 0.02,
+  },
+  headerRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 4,
+  },iconShadow: {
+    shadowColor: "#000",
+    shadowOpacity: 1,
+    shadowRadius: 2,
+    shadowOffset: { width: 1, height: 1 },
+    elevation: 3, // Android support
+  },iconButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "column",
+    paddingHorizontal: 8,
+  },iconLabel: {
+    color: "#000",
+    fontSize: 13,
+    marginTop: 3,
+    textAlign: "center",
+  },saveIcon: {
+  shadowOpacity: 1,
+  shadowRadius: 2,
+  shadowOffset: { width: 1, height: 1 },
+  elevation: 3, // Android shadow support
+  },modalBackground: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.95)",
+  justifyContent: "center",
+  alignItems: "center",
+  },fullImage: {
+    width: "100%",
+    height: "100%",
+  },
+  closeArea: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
+  closeIcon: {
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 20,
+    padding: 6,
   },
 });

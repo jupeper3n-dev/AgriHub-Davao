@@ -7,9 +7,7 @@
     "icon": "./assets/images/agrihub-davao-logo.png",
     "scheme": "AgriHubDavao",
     "userInterfaceStyle": "light",
-
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true
     },
@@ -19,7 +17,7 @@
         "foregroundImage": "./assets/images/agrihub-desktop-logo.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      }, 
+      },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.deive03.agrihubdavao",
@@ -54,7 +52,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "react-native-permissions"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -74,6 +73,5 @@
         "projectId": "b593a07f-9c26-44af-8ae6-70882f1b8fef"
       }
     }
-    
   }
 }

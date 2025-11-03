@@ -8,7 +8,7 @@ import {
   ref,
   set,
 } from "firebase/database";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { AppState, Platform } from "react-native";
 import { auth, db, rtdb } from "../firebaseConfig";
 
@@ -86,24 +86,36 @@ export const setupPresence = () => {
   }
 
   onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      console.log("User logged out — disabling presence safely");
-      initializedForUser = null;
-      try {
-        goOffline(getDatabase());
-      } catch {
-        console.warn("RTDB already offline");
+  if (!user) {
+    console.log("User logged out — disabling presence safely");
+    initializedForUser = null;
+
+    try {
+      // Immediately mark Firestore offline
+      const prevUser = auth.currentUser;
+      if (prevUser?.uid) {
+        const userRef = doc(db, "users", prevUser.uid);
+        await setDoc(userRef, { isOnline: false, lastSeen: new Date() }, { merge: true });
+        console.log("Marked user offline in Firestore");
       }
 
-      safeUnsub(connectedUnsub);
-      connectedUnsub = null;
-
-      if (watchdogInterval) {
-        clearInterval(watchdogInterval);
-        watchdogInterval = null;
-      }
-      return; // exit cleanly
+      // Go offline in RTDB
+      goOffline(getDatabase());
+    } catch (err) {
+      console.warn("Logout presence cleanup failed:", err);
     }
+
+    // Cleanup listeners and watchdog
+    safeUnsub(connectedUnsub);
+    connectedUnsub = null;
+
+    if (watchdogInterval) {
+      clearInterval(watchdogInterval);
+      watchdogInterval = null;
+    }
+
+    return; // exit cleanly
+  }
 
     // Prevent duplicate initialization
     if (initializedForUser === user.uid) {
@@ -124,8 +136,8 @@ export const setupPresence = () => {
     const rtdbRef = ref(rtdb, `/status/${user.uid}`);
     const connectedRef = ref(rtdb, ".info/connected");
 
-    const onlineFirestore = { isOnline: true, lastSeen: serverTimestamp() };
-    const offlineFirestore = { isOnline: false, lastSeen: serverTimestamp() };
+    const onlineFirestore = { isOnline: true, lastSeen: new Date() };
+    const offlineFirestore = { isOnline: false, lastSeen: new Date() };
     const onlineRTDB = { state: "online", lastChanged: Date.now() };
     const offlineRTDB = { state: "offline", lastChanged: Date.now() };
 

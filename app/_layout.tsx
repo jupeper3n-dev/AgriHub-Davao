@@ -5,16 +5,24 @@ import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged } from "firebase/auth";
 import { enableNetwork, getFirestore } from "firebase/firestore";
 import React, { useEffect } from "react";
-import { AppState } from "react-native";
+import { AppState, LogBox } from "react-native";
 import "react-native-reanimated";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../firebaseConfig";
 import { setupPresence } from "../lib/presenceTracker";
 
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
-
+  useEffect(() => {
+      LogBox.ignoreLogs([
+        "Target ID already exists", // Firestore duplicate listener warning
+        "Snapshot listener",        // (optional broader ignore)
+        "AsyncStorage has been extracted", // keep React Native’s common warning silent
+      ]);
+    }, []);
+    
   // Initialize presence tracking
   useEffect(() => {
     setupPresence();

@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   const [resetModalVisible, setResetModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // 👁️ new
   const router = useRouter();
 
   useEffect(() => {
@@ -191,17 +193,31 @@ export default function LoginScreen() {
           }}
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#000"
-          value={password}
-          onChangeText={(v) => {
-            setPassword(v);
-            setLoginError("");
-          }}
-          secureTextEntry
-        />
+        {/* Password with Eye toggle */}
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="Password"
+            placeholderTextColor="#000"
+            value={password}
+            onChangeText={(v) => {
+              setPassword(v);
+              setLoginError("");
+            }}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={showPassword ? "eye" : "eye-off"}
+              size={22}
+              color={showPassword ? "#000" : "rgba(0,0,0,0.4)"}
+            />
+          </TouchableOpacity>
+        </View>
 
         {/* Remember me + Forgot password row */}
         <View style={styles.optionsRow}>
@@ -448,6 +464,26 @@ const styles = StyleSheet.create({
   fontSize: 14,
   marginBottom: 8,
   textAlign: "center",
+},passwordContainer: {
+  width: "100%",
+  position: "relative",
+  marginBottom: 12,
 },
-
+inputPassword: {
+  width: "100%",
+  borderWidth: 1,
+  borderColor: "#ccc",
+  borderRadius: 10,
+  padding: 12,
+  paddingRight: 40, // space for the eye icon
+  fontSize: 16,
+  color: "#333",
+},
+eyeButton: {
+  position: "absolute",
+  right: 10,
+  top: "50%",
+  transform: [{ translateY: -11 }],
+  padding: 0,
+},
 });

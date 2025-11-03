@@ -235,11 +235,15 @@ if (userData?.verified === true || verification === "approved") {
                   userData?.userType?.toLowerCase() === "consumer" && {
                     width: "60%",
                     alignItems: "center",
+                  },{
+                    backgroundColor: "#fff",    
+                    borderWidth: 2,                
+                    borderColor: "#4A8C2A",
                   },
                 ]}
                 onPress={() => router.push("/modals/edit-profile")}
               >
-                <Text style={styles.editButtonText}>Edit Profile</Text>
+                <Text style={[styles.editButtonText, { color: "#43A047"}]}>Edit Profile</Text>
               </TouchableOpacity>
 
               {userData?.userType?.toLowerCase() !== "consumer" && (
@@ -264,7 +268,7 @@ if (userData?.verified === true || verification === "approved") {
                     }
                   }}
                 >
-                  <Text style={styles.editButtonText}>Add Product</Text>
+                  <Text style={styles.editButtonText}>Add Post</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -276,8 +280,8 @@ if (userData?.verified === true || verification === "approved") {
               style={styles.optionItem}
               onPress={() => router.push("/saved-posts")}
             >
-              <Ionicons name="bookmark-outline" size={22} color="#1E88E5" />
-              <Text style={[styles.optionText, { color: "#1E88E5" }]}>
+              <Ionicons name="bookmark-outline" size={22} color="#43A047" />
+              <Text style={[styles.optionText, { color: "#43A047" }]}>
                 Saved Posts
               </Text>
             </TouchableOpacity>
@@ -359,13 +363,13 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     marginBottom: 15,
     borderWidth: 3,
-    borderColor: "#1E88E5",
+    borderColor: "#43A047",
   },
   name: { fontSize: 22, fontWeight: "bold", color: "#222" },
   email: { fontSize: 14, color: "#666", marginBottom: 6 },
   roleBadge: {
-    fontSize: 14,
-    color: "#1E88E5",
+    fontSize: 16,
+    color: "#43A047",
     fontWeight: "600",
     marginBottom: 10,
   },
@@ -430,9 +434,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardImg: { width: 78, height: 78, borderRadius: 8 },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#222" },
-  cardSub: { fontSize: 12, color: "#777", marginTop: 2 },
-  cardPrice: { fontWeight: "700", color: "#1E88E5", marginTop: 6 },
+  cardTitle: { fontSize: 20, fontWeight: "600", color: "#43A047" },
+  cardSub: { fontSize: 14, color: "#777", marginTop: 2 },
+  cardPrice: { fontWeight: "700", color: "#43A047", marginTop: 6 },
   cardActions: { flexDirection: "row", gap: 16, marginTop: 8 },
-  link: { color: "#1E88E5", fontWeight: "600" },
+  link: { color: "#43A047", fontWeight: "600" },
 });

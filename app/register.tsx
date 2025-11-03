@@ -22,6 +22,7 @@ import { auth, db } from "../firebaseConfig";
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -29,6 +30,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Password validation
   const isPasswordStrong = (pwd: string) => {
@@ -37,7 +39,7 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!email || !password || !fullName || !phone || !address)
+    if (!email || !password || !confirmPassword || !fullName || !phone || !address)
       return Alert.alert("Missing fields", "Please fill in all required information.");
 
     if (!isPasswordStrong(password))
@@ -45,6 +47,9 @@ export default function RegisterScreen() {
         "Weak Password",
         "Password must be at least 10 characters long and include:\n• 1 uppercase letter\n• 1 lowercase letter\n• 1 number"
       );
+
+    if (password !== confirmPassword)
+      return Alert.alert("Password Mismatch", "Passwords do not match. Please try again.");
 
     setLoading(true);
     try {
@@ -75,6 +80,21 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
+
+  // Real-time password match indicator
+  const passwordMatchMessage =
+    confirmPassword.length > 0
+      ? password === confirmPassword
+        ? "Passwords match"
+        : "Passwords do not match"
+      : "";
+
+  const passwordMatchColor =
+    confirmPassword.length > 0
+      ? password === confirmPassword
+        ? "#4CAF50"
+        : "#E53935"
+      : "transparent";
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -110,6 +130,40 @@ export default function RegisterScreen() {
             />
           </TouchableOpacity>
         </View>
+
+        {/* Confirm Password */}
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[
+              styles.inputPassword,
+              confirmPassword.length > 0 && password !== confirmPassword
+                ? { borderColor: "#E53935" }
+                : {},
+            ]}
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showConfirmPassword}
+          />
+          <TouchableOpacity
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            style={styles.eyeButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={showConfirmPassword ? "eye" : "eye-off"}
+              size={22}
+              color={showConfirmPassword ? "#000" : "rgba(0,0,0,0.4)"}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Password Match Indicator */}
+        {confirmPassword.length > 0 && (
+          <Text style={[styles.matchText, { color: passwordMatchColor }]}>
+            {passwordMatchMessage}
+          </Text>
+        )}
 
         {/* Phone Number */}
         <TextInput
@@ -162,10 +216,7 @@ export default function RegisterScreen() {
         )}
 
         {/* Login Link */}
-        <TouchableOpacity
-          onPress={() => router.push("/login")}
-          style={styles.linkWrap}
-        >
+        <TouchableOpacity onPress={() => router.push("/login")} style={styles.linkWrap}>
           <Text style={styles.link}>Already have an account? Login</Text>
         </TouchableOpacity>
       </View>
@@ -182,7 +233,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    alignItems: "flex-start", // Left align all inputs and labels
+    alignItems: "flex-start",
     backgroundColor: "#fff",
     paddingTop: 60,
   },
@@ -228,18 +279,18 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   linkWrap: {
-  width: "100%",           // make the touch area full width
-  alignItems: "center",    // center the text inside
-  marginTop: 15,
+    width: "100%",
+    alignItems: "center",
+    marginTop: 15,
   },
   link: {
     color: "#1E88E5",
     fontSize: 14,
   },
   passwordContainer: {
-  width: "100%",
-  position: "relative",
-  marginBottom: 10,
+    width: "100%",
+    position: "relative",
+    marginBottom: 10,
   },
   inputPassword: {
     width: "100%",
@@ -247,14 +298,19 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     borderRadius: 8,
     padding: 10,
-    paddingRight: 40, // space for the eye icon
+    paddingRight: 40,
     color: "#000",
   },
   eyeButton: {
     position: "absolute",
     right: 10,
     top: "50%",
-    transform: [{ translateY: -11 }], // vertically center the icon
+    transform: [{ translateY: -11 }],
     padding: 0,
+  },
+  matchText: {
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

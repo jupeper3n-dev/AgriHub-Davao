@@ -208,10 +208,12 @@ const styles = StyleSheet.create({
   map: { width: "100%", height: 400, borderRadius: 10 },
   closeBtn: {
     marginTop: 10,
-    backgroundColor: "#1E88E5",
+    backgroundColor: "#fff",
     padding: 10,
     borderRadius: 8,
     alignItems: "center",
+    borderColor: "#43A047",
+    borderWidth: 1,
   },
   closeText: { color: "#fff", fontWeight: "bold" },
   loading: { textAlign: "center", color: "#888", marginVertical: 10 },
@@ -227,12 +229,12 @@ const styles = StyleSheet.create({
 },valueBlue: {
   fontSize: 22,
   fontWeight: "bold",
-  color: "#1E88E5",
+  color: "#43A047",
   marginBottom: 8,
 },valueRed: {
   fontSize: 22,
   fontWeight: "bold",
-  color: "#E53935",
+  color: "#43A047",
   marginBottom: 10,
 },
 });

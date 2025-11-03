@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   addDoc,
@@ -15,6 +16,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Modal,
   StyleSheet,
   Text,
@@ -60,11 +62,17 @@ export default function CommentsModal() {
 
     try {
       const userSnap = await getDoc(doc(db, "users", user.uid));
-      const userName = userSnap.exists() ? userSnap.data().fullName : user.email;
+      const userData = userSnap.exists() ? userSnap.data() : {};
+      const userName = userData.fullName || user.email;
+      const photoURL =
+        userData.photoURL ||
+        userData.profileImage ||
+        "https://cdn-icons-png.flaticon.com/512/847/847969.png";
 
       await addDoc(collection(db, "products", String(productId), "comments"), {
         userId: user.uid,
         userName,
+        userPhoto: photoURL,
         text: newComment.trim(),
         likes: [],
         parentId: replyTo ? replyTo.id : null,
@@ -104,85 +112,114 @@ export default function CommentsModal() {
     }));
   };
 
-  // Recursive render of replies
+  // Recursive replies renderer
   const renderReplies = (parentId: string, depth = 1) => {
     const replies = comments.filter((c) => c.parentId === parentId);
     if (replies.length === 0) return null;
 
     return replies.map((reply) => {
-      const isExpanded = expandedThreads[reply.id] ?? true; // expanded by default
+      const isExpanded = expandedThreads[reply.id] ?? true;
 
       return (
-        <View
-          key={reply.id}
-          style={[
-            styles.replyBox,
-            { marginLeft: depth * 20, backgroundColor: "#f0f7ff" },
-          ]}
-        >
-          <Text style={styles.replyName}>{reply.userName}</Text>
-          <Text style={styles.replyText}>{reply.text}</Text>
+        <View key={reply.id} style={[styles.replyBox, { marginLeft: depth *5 , marginTop: 15}]}>
+        <TouchableOpacity onPress={() => router.push({ pathname: "/profile-view", params: { uid: reply.userId } })}>
+          <Image
+            source={{ uri: reply.userPhoto }}
+            style={styles.avatarSmall}
+          />
+        </TouchableOpacity>
 
-          <View style={styles.replyActions}>
-            <TouchableOpacity onPress={() => toggleLike(reply)}>
-              <Text style={{ color: "#E91E63" }}>
-                ♥ {reply.likes?.length || 0}
-              </Text>
+          <View style={{ flex: 1 }}>
+            <TouchableOpacity onPress={() => router.push({ pathname: "/profile-view", params: { uid: reply.userId } })}>
+              <Text style={[styles.replyName, { color: "#1E88E5"}]}>{reply.userName}</Text>
             </TouchableOpacity>
+            <Text style={styles.replyText}>{reply.text}</Text>
 
-            <TouchableOpacity onPress={() => setReplyTo(reply)}>
-              <Text style={{ color: "#1E88E5" }}>Reply</Text>
-            </TouchableOpacity>
-
-            {comments.some((c) => c.parentId === reply.id) && (
-              <TouchableOpacity onPress={() => toggleThread(reply.id)}>
-                <Text style={{ color: "#888" }}>
-                  {isExpanded ? "Hide replies" : "Show replies"}
-                </Text>
+            <View style={styles.replyActions}>
+              <TouchableOpacity onPress={() => toggleLike(reply)}>
+                <Ionicons
+                  name={
+                    reply.likes?.includes(auth.currentUser?.uid)
+                      ? "heart"
+                      : "heart-outline"
+                  }
+                  size={18}
+                  color="#E91E63"
+                />
               </TouchableOpacity>
-            )}
-          </View>
+              <Text style={styles.likeCount}>{reply.likes?.length || 0}</Text>
 
-          {/* Recursive replies (conditionally rendered) */}
-          {isExpanded && renderReplies(reply.id, depth + 1)}
+              <TouchableOpacity onPress={() => setReplyTo(reply)}>
+                <Ionicons name="chatbubble-outline" size={18} color="#1E88E5" />
+              </TouchableOpacity>
+
+              {comments.some((c) => c.parentId === reply.id) && (
+                <TouchableOpacity onPress={() => toggleThread(reply.id)}>
+                  <Ionicons
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color="#888"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {isExpanded && renderReplies(reply.id, depth + 1)}
+          </View>
         </View>
       );
     });
   };
 
   const renderComment = ({ item }: { item: any }) => {
-    const user = auth.currentUser;
-    const liked = item.likes?.includes(user?.uid);
+    const liked = item.likes?.includes(auth.currentUser?.uid);
     const isExpanded = expandedThreads[item.id] ?? true;
     const hasReplies = comments.some((c) => c.parentId === item.id);
 
     return (
-      <View style={styles.commentBox}>
-        <Text style={styles.userName}>{item.userName}</Text>
-        <Text style={styles.text}>{item.text}</Text>
+      <View style={styles.commentRow}>
+      <TouchableOpacity onPress={() => router.push({ pathname: "/profile-view", params: { uid: item.userId } })}>
+        <Image
+          source={{
+            uri: item.userPhoto || "https://cdn-icons-png.flaticon.com/512/847/847969.png",
+          }}
+          style={styles.avatar}
+        />
+      </TouchableOpacity>
 
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={() => toggleLike(item)}>
-            <Text style={{ color: liked ? "#E91E63" : "#666" }}>
-              {liked ? "♥" : "♡"} {item.likes?.length || 0}
-            </Text>
+        <View style={styles.commentBox}>
+          <TouchableOpacity onPress={() => router.push({ pathname: "/profile-view", params: { uid: item.userId } })}>
+            <Text style={[styles.userName, { color: "#1E88E5"}]}>{item.userName}</Text>
           </TouchableOpacity>
+          <Text style={styles.text}>{item.text}</Text>
 
-          <TouchableOpacity onPress={() => setReplyTo(item)}>
-            <Text style={{ color: "#1E88E5" }}>Reply</Text>
-          </TouchableOpacity>
-
-          {hasReplies && (
-            <TouchableOpacity onPress={() => toggleThread(item.id)}>
-              <Text style={{ color: "#888" }}>
-                {isExpanded ? "Hide replies" : "Show replies"}
-              </Text>
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={() => toggleLike(item)}>
+              <Ionicons
+                name={liked ? "heart" : "heart-outline"}
+                size={20}
+                color={liked ? "#E91E63" : "#666"}
+              />
             </TouchableOpacity>
-          )}
-        </View>
+            <Text style={styles.likeCount}>{item.likes?.length || 0}</Text>
 
-        {/* Nested replies */}
-        {isExpanded && renderReplies(item.id)}
+            <TouchableOpacity onPress={() => setReplyTo(item)}>
+              <Ionicons name="chatbubble-outline" size={20} color="#1E88E5" />
+            </TouchableOpacity>
+
+            {hasReplies && (
+              <TouchableOpacity onPress={() => toggleThread(item.id)}>
+                <Ionicons
+                  name={isExpanded ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color="#888"
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isExpanded && renderReplies(item.id)}
+        </View>
       </View>
     );
   };
@@ -190,27 +227,32 @@ export default function CommentsModal() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#1E88E5" />
+        <ActivityIndicator color="#4A8C2A" />
       </View>
     );
   }
 
   return (
-    <Modal animationType="slide" visible={true} onRequestClose={() => router.back()}>
+    <Modal animationType="slide" visible onRequestClose={() => router.back()}>
       <View style={styles.container}>
-        {/* Header with Back */}
+        {/* Header */}
         <View style={styles.header}>
-        <Text style={styles.headerTitle}>💬 Comments</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.closeBtn}>✖</Text>
-        </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons name="chatbubbles-outline" size={22} color="#fff" />
+            <Text style={styles.headerTitle}>Comments</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="close" size={26} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {replyTo && (
           <View style={styles.replyingTo}>
-            <Text>Replying to {replyTo.userName}</Text>
+            <Text style={styles.replyingText}>
+              Replying to <Text style={{ fontWeight: "bold" }}>{replyTo.userName}</Text>
+            </Text>
             <TouchableOpacity onPress={() => setReplyTo(null)}>
-              <Text style={{ color: "red" }}>Cancel</Text>
+              <Ionicons name="close-circle" size={20} color="#E53935" />
             </TouchableOpacity>
           </View>
         )}
@@ -226,11 +268,19 @@ export default function CommentsModal() {
           <TextInput
             style={styles.input}
             placeholder="Write a comment..."
+            placeholderTextColor="#777"
             value={newComment}
             onChangeText={setNewComment}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-            <Text style={{ color: "#fff" }}>Send</Text>
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              !newComment.trim() && { opacity: 0.6 },
+            ]}
+            onPress={handleSend}
+            disabled={!newComment.trim()}
+          >
+            <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -239,83 +289,118 @@ export default function CommentsModal() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", paddingTop: 20 },
-  backBtn: { color: "#1E88E5", fontWeight: "bold", fontSize: 16 },
-  title: { fontSize: 20, fontWeight: "bold" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  commentBox: {
-    backgroundColor: "#f5f5f5",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-    marginHorizontal: 12,
+  container: { flex: 1, backgroundColor: "#f9fafb" },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#4A8C2A",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    elevation: 4,
   },
-  userName: { fontWeight: "bold", color: "#333" },
-  text: { marginVertical: 4, color: "#444" },
-  actions: { flexDirection: "row", gap: 20, marginTop: 4 },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+    marginLeft: 6,
+  },
+
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginHorizontal: 12,
+    marginVertical: 6,
+  },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 8,
+    backgroundColor: "#eee",
+  },
+  avatarColumn: {
+    marginRight: 6,
+  },
+  avatarSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#eee",
+    marginRight: 5,
+  },
+
+  commentBox: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  userName: { fontWeight: "bold", color: "#4A8C2A" },
+  text: { color: "#333", marginVertical: 4, fontSize: 15 },
+
+  actions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  likeCount: { color: "#555", fontSize: 13, marginLeft: -4 },
+
   replyBox: {
-    backgroundColor: "#e8f4ff",
-    padding: 6,
-    borderRadius: 8,
-    marginBottom: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#f1f8e9",
+    borderRadius: 10,
+    padding: 8,
+    marginVertical: 4,
+    marginRight: 12,
   },
   replyName: { fontWeight: "600", color: "#1E88E5" },
-  replyText: { color: "#333" },
-  replyActions: { flexDirection: "row", gap: 12, marginTop: 4 },
+  replyText: { color: "#333", marginVertical: 2 },
+  replyActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+
   replyingTo: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 10,
-    backgroundColor: "#e3f2fd",
-    padding: 8,
-    borderRadius: 8,
+    alignItems: "center",
     marginHorizontal: 12,
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
   },
+  replyingText: { color: "#333", fontSize: 14 },
+
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderColor: "#ddd",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#fff",
-    padding: 8,
-    borderTopWidth: 1,
-    borderColor: "#ddd",
   },
   input: {
     flex: 1,
+    backgroundColor: "#f4f4f4",
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    marginRight: 8,
+    color: "#000",
   },
   sendBtn: {
-    backgroundColor: "#1E88E5",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: "#4A8C2A",
     borderRadius: 20,
+    padding: 10,
+    marginLeft: 8,
   },
-header: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingHorizontal: 16,
-  paddingVertical: 10,
-  borderBottomWidth: 1,
-  borderBottomColor: "#ddd",
-  backgroundColor: "#fff",
-},
-headerTitle: {
-  fontSize: 20,
-  fontWeight: "bold",
-  color: "#333",
-},
-closeBtn: {
-  fontSize: 22,
-  color: "#E53935",
-  fontWeight: "bold",
-},
 });
