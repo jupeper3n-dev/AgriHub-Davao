@@ -40,8 +40,11 @@ export default function AdminPanel() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [suspendDays, setSuspendDays] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
-  // 🟢 NEW STATES FOR DECLINE MODAL
+
+  // NEW STATES FOR DECLINE MODAL
   const [declineModal, setDeclineModal] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [selectedVerification, setSelectedVerification] = useState<any>(null);
@@ -64,7 +67,7 @@ export default function AdminPanel() {
       );
       setVerified(verifiedList);
 
-      // 🟢 UPDATED PENDING TAB FETCH WITH USER INFO
+      // UPDATED PENDING TAB FETCH WITH USER INFO
       const pendingSnap = await getDocs(collection(db, "user_verifications"));
       const pendingList: any[] = [];
       for (const d of pendingSnap.docs) {
@@ -205,7 +208,7 @@ export default function AdminPanel() {
     }
   };
 
-  // 🟢 Approve/Decline Verifications
+  // Approve/Decline Verifications
   const handleVerificationDecision = async (
     item: any,
     approve: boolean,
@@ -220,18 +223,18 @@ export default function AdminPanel() {
           status: "approved",
           reviewedAt: new Date(),
         });
-        Alert.alert("✅ Approved", `${item.fullName} is now verified.`);
+        Alert.alert(" Approved", `${item.fullName} is now verified.`);
       } else {
         await updateDoc(verifyRef, {
           status: "rejected",
           reason: reason || "No reason provided",
           reviewedAt: new Date(),
         });
-        Alert.alert("❌ Rejected", "Verification declined.");
+        Alert.alert(" Rejected", "Verification declined.");
       }
       setDeclineModal(false);
       setDeclineReason("");
-      // 🟢 AUTO REFRESH
+      // AUTO REFRESH
       fetchData();
     } catch (err: any) {
       console.error(err);
@@ -341,10 +344,24 @@ export default function AdminPanel() {
           <Text style={styles.email}>{item.email}</Text>
           <View style={styles.imageRow}>
             {item.frontIdUrl && (
-              <Image source={{ uri: item.frontIdUrl }} style={styles.image} />
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedImageUrl(item.frontIdUrl);
+                  setImageModalVisible(true);
+                }}
+              >
+                <Image source={{ uri: item.frontIdUrl }} style={styles.image} />
+              </TouchableOpacity>
             )}
             {item.backIdUrl && (
-              <Image source={{ uri: item.backIdUrl }} style={styles.image} />
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedImageUrl(item.backIdUrl);
+                  setImageModalVisible(true);
+                }}
+              >
+                <Image source={{ uri: item.backIdUrl }} style={styles.image} />
+              </TouchableOpacity>
             )}
           </View>
           <View style={styles.actions}>
@@ -367,7 +384,7 @@ export default function AdminPanel() {
 
     // USERS/VERIFIED RENDERER WITH BADGE
     return ({ item }: any) => {
-      const verified = item.verified ? "Verified ✅" : "Unverified ⚠️";
+      const verified = item.verified ? "Verified " : "Unverified ";
       const badgeColor = item.verified ? "#4A8C2A" : "#FFA000";
 
       return (
@@ -509,6 +526,24 @@ export default function AdminPanel() {
           </View>
         </View>
       </Modal>
+
+      {/* 🖼️ Image Preview Modal */}
+      <Modal visible={imageModalVisible} transparent animationType="fade">
+        <View style={styles.imageModalOverlay}>
+          <View style={styles.imageModalBox}>
+            {selectedImageUrl && (
+              <Image source={{ uri: selectedImageUrl }} style={styles.imagePreview} />
+            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setImageModalVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -642,4 +677,41 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   modalText: { color: "#fff", fontWeight: "bold" },
+  // Add these new styles below your existing styles
+imageModalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0, 0, 0, 0.8)",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+},
+
+imageModalBox: {
+  backgroundColor: "#fff",
+  borderRadius: 10,
+  padding: 10,
+  width: "90%",
+  alignItems: "center",
+},
+
+imagePreview: {
+  width: "100%",
+  height: 400,
+  borderRadius: 8,
+  resizeMode: "contain",
+  marginBottom: 10,
+},
+
+closeButton: {
+  backgroundColor: "#E53935",
+  borderRadius: 8,
+  paddingVertical: 8,
+  paddingHorizontal: 20,
+},
+
+closeButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 16,
+},
 });

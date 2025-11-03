@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   RefreshControl,
@@ -29,6 +30,8 @@ import {
   View
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
+
+const { width } = Dimensions.get("window");
 
 // Utility: format "X minutes ago"
 function getTimeAgo(date: Date): string {
@@ -361,7 +364,13 @@ export default function DashboardScreen() {
 
       {/* Top Navbar */}
       <View style={styles.topBar}>
-        <Text style={styles.navTitle}>AgriHub Davao</Text>
+                <View style={styles.brandContainer}>
+                  <Image
+                    source={require("@/assets/images/agrihub-davao-logo.png")}
+                    style={styles.logo}
+                  />
+                  <Text style={styles.navTitle}>Admin Panel</Text>
+                </View>
         <TouchableOpacity onPress={() => router.push("/search-users")}>
           <Ionicons name="search" size={24} color="#fff" />
         </TouchableOpacity>
@@ -403,18 +412,18 @@ export default function DashboardScreen() {
           contentContainerStyle={{ paddingBottom: 50 }}
         />
       </View>
-      {/* Add Product Button */}
-<View style={styles.addButtonContainer}>
-  <TouchableOpacity
-    style={styles.addButton}
-    onPress={() => {
-      router.push("/modals/product-form");
-    }}
-  >
-    <Ionicons name="add-circle-outline" size={24} color="#fff" />
-    <Text style={styles.addButtonText}>Add Product</Text>
-  </TouchableOpacity>
-</View>
+        {/* Add Product Button — Only for Store Owners or Farmers */}
+        {(userRole === "Store Owner" || userRole === "Farmer") && (
+          <View style={styles.addButtonContainer}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => router.push("/modals/product-form")}
+            >
+              <Ionicons name="add-circle-outline" size={24} color="#fff" />
+              <Text style={styles.addButtonText}>Add Product</Text>
+            </TouchableOpacity>
+          </View>
+        )}
     </SafeAreaView>
   );
 }
@@ -515,5 +524,13 @@ addButtonText: {
   fontWeight: "bold",
   fontSize: 18,
   marginLeft: 8,
-},
+},  logo: {
+    width: width * 0.12,
+    height: width * 0.12,
+    resizeMode: "contain",
+  },  brandContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: width * 0.02,
+  },
 });

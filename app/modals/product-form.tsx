@@ -72,20 +72,22 @@ export default function ProductForm() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!id) return;
-
-    let unsub: (() => void) | null = null;
-    let active = true;
-
-    // Debounce to avoid double subscription on quick re-entry
-    const timer = setTimeout(() => {
-      if (!active) return; // guard if component unmounted quickly
+    useEffect(() => {
+      if (!id) return;
 
       const productRef = doc(db, "products", String(id));
-      unsub = onSnapshot(
+      setLoading(true);
+
+      // keep track of whether the component is still mounted
+      let isActive = true;
+
+      console.log("📡 Subscribing to product:", id);
+
+      // Subscribe to Firestore snapshot
+      const unsubscribe = onSnapshot(
         productRef,
         (snap) => {
+          if (!isActive) return; // prevents updates after unmount
           if (snap.exists()) {
             const d = snap.data() as any;
             setForm({
@@ -102,30 +104,18 @@ export default function ProductForm() {
           setLoading(false);
         },
         (error) => {
-          console.warn("Firestore listener error:", error.message);
+          console.error("🔥 Firestore listener error:", error.message);
           setLoading(false);
         }
       );
-    }, 300);
 
-    return () => {
-      // Mark as inactive BEFORE clearing
-      active = false;
-
-      // Clear the debounce timer first
-      clearTimeout(timer);
-
-      // Then unsubscribe safely
-      if (unsub) {
-        try {
-          unsub();
-          console.log("Firestore listener cleaned up (ProductForm)");
-        } catch (err) {
-          console.warn("Error cleaning Firestore listener:", err);
-        }
-      }
-    };
-  }, [id]);
+      // cleanup on unmount
+      return () => {
+        console.log("🧹 Cleaning up listener for:", id);
+        isActive = false;
+        unsubscribe(); // stop the listener immediately
+      };
+    }, [id]);
 
   // Update location name from map
   useEffect(() => {

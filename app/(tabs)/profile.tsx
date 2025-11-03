@@ -51,77 +51,64 @@ export default function ProfileScreen() {
       const user = auth.currentUser;
       if (!user) return;
 
-      // Guards
-      let isMounted = true;
-      let unsubUser: (() => void) | null = null;
-      let unsubVerify: (() => void) | null = null;
-      let unsubProducts: (() => void) | null = null;
+      let unsubscribers: Array<() => void> = [];
+      let isActive = true;
 
-      // Debounce to avoid overlapping listeners on rapid focus transitions
-      const timer = setTimeout(() => {
-        if (!isMounted) return;
+      // Helper to safely subscribe
+      const subscribeSafely = (callback: () => () => void) => {
+        if (!isActive) return;
+        const unsub = callback();
+        unsubscribers.push(unsub);
+      };
 
-        try {
-          const userRef = doc(db, "users", user.uid);
-          unsubUser = onSnapshot(
-            userRef,
-            (snap) => {
-              if (!isMounted) return;
-              if (snap.exists()) setUserData(snap.data());
-              setLoading(false);
-            },
-            (err) => console.warn("users listener:", err.message)
-          );
+      try {
+        // 👤 User data listener
+        subscribeSafely(() =>
+          onSnapshot(doc(db, "users", user.uid), (snap) => {
+            if (!isActive) return;
+            if (snap.exists()) setUserData(snap.data());
+            setLoading(false);
+          })
+        );
 
-          const verifyRef = doc(db, "user_verifications", user.uid);
-          unsubVerify = onSnapshot(
-            verifyRef,
-            (snap) => {
-              if (!isMounted) return;
-              if (snap.exists()) {
-                setVerification(snap.data().status);
-              } else if (userData?.verified) {
-                setVerification("approved");
-              } else {
-                setVerification(null);
-              }
-            },
-            (err) => console.warn("verifications listener:", err.message)
-          );
+        // 🪪 Verification listener
+        subscribeSafely(() =>
+          onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
+            if (!isActive) return;
+            if (snap.exists()) {
+              setVerification(snap.data().status);
+            } else if (userData?.verified) {
+              setVerification("approved");
+            } else {
+              setVerification(null);
+            }
+          })
+        );
 
+        // 🛒 Products listener
+        subscribeSafely(() => {
           const q = query(
             collection(db, "products"),
             where("userId", "==", user.uid),
             orderBy("createdAt", "desc")
           );
+          return onSnapshot(q, (snap) => {
+            if (!isActive) return;
+            const rows: Product[] = [];
+            snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as any) }));
+            setMyProducts(rows);
+          });
+        });
+      } catch (e) {
+        console.error("Firestore subscription error:", e);
+      }
 
-          unsubProducts = onSnapshot(
-            q,
-            (snap) => {
-              if (!isMounted) return;
-              const rows: Product[] = [];
-              snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as any) }));
-              setMyProducts(rows);
-            },
-            (err) => console.warn("products listener:", err.message)
-          );
-        } catch (e: any) {
-          console.error("Firestore subscription error:", e.message);
-        }
-      }, 300); // delay ensures previous listener cleanup finishes first
-
-      // Cleanup
+      // 🧹 Cleanup when screen unfocuses
       return () => {
-        isMounted = false;
-        clearTimeout(timer);
-        try {
-          unsubUser && unsubUser();
-          unsubVerify && unsubVerify();
-          unsubProducts && unsubProducts();
-          console.log("ProfileScreen listeners cleaned up safely");
-        } catch (e) {
-          console.warn("Cleanup error:", e);
-        }
+        console.log("Cleaning up Profile listeners...");
+        isActive = false;
+        unsubscribers.forEach((unsub) => unsub());
+        unsubscribers = [];
       };
     }, [refresh])
   );
@@ -188,11 +175,16 @@ if (userData?.verified === true || verification === "approved") {
   return (
     <FlatList
       style={styles.container}
-      data={myProducts}
+      data={
+        userData?.userType?.toLowerCase() === "consumer"
+          ? [] // no products shown for consumers
+          : myProducts
+      }
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ paddingBottom: 40 }}
       ListHeaderComponent={
         <>
+          {/* --- existing header (same as before) --- */}
           <View style={styles.header}>
             <Image
               source={{
@@ -205,20 +197,12 @@ if (userData?.verified === true || verification === "approved") {
             <Text style={styles.name}>{userData?.fullName || "No Name"}</Text>
             <Text style={styles.email}>{userData?.email}</Text>
 
-            {/* Role Display */}
             {userData?.userType && (
-              <Text style={styles.roleBadge}>
-                {userData.userType}
-              </Text>
+              <Text style={styles.roleBadge}>{userData.userType}</Text>
             )}
 
-            {/* Verification Badges */}
             <Text style={[styles.badge, { backgroundColor: statusColor }]}>
-              {statusLabel === "Verified"
-                ? "Verified"
-                : statusLabel === "Pending Verification"
-                ? "Pending Verification"
-                : "Not Verified"}
+              {statusLabel}
             </Text>
 
             {statusLabel === "Not Verified" && (
@@ -231,37 +215,58 @@ if (userData?.verified === true || verification === "approved") {
               </TouchableOpacity>
             )}
 
-            {/* Edit & Add Product */}
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+            <View
+              style={{
+                flexDirection:
+                  userData?.userType?.toLowerCase() === "consumer"
+                    ? "column"
+                    : "row",
+                alignItems:
+                  userData?.userType?.toLowerCase() === "consumer"
+                    ? "center"
+                    : "flex-start",
+                gap: 10,
+                marginTop: 10,
+              }}
+            >
               <TouchableOpacity
-                style={styles.editButton}
+                style={[
+                  styles.editButton,
+                  userData?.userType?.toLowerCase() === "consumer" && {
+                    width: "60%",
+                    alignItems: "center",
+                  },
+                ]}
                 onPress={() => router.push("/modals/edit-profile")}
               >
                 <Text style={styles.editButtonText}>Edit Profile</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.editButton, { backgroundColor: "#43A047" }]}
-                onPress={() => {
-                  if (statusLabel !== "Verified") {
-                    Alert.alert(
-                      "Account Not Verified",
-                      "You must verify your account before adding products.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Verify Now",
-                          onPress: () => router.push("/modals/upload-verification"),
-                        },
-                      ]
-                    );
-                  } else {
-                    router.push("/modals/product-form");
-                  }
-                }}
-              >
-                <Text style={styles.editButtonText}>Add Product</Text>
-              </TouchableOpacity>
+              {userData?.userType?.toLowerCase() !== "consumer" && (
+                <TouchableOpacity
+                  style={[styles.editButton, { backgroundColor: "#43A047" }]}
+                  onPress={() => {
+                    if (statusLabel !== "Verified") {
+                      Alert.alert(
+                        "Account Not Verified",
+                        "You must verify your account before adding products.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Verify Now",
+                            onPress: () =>
+                              router.push("/modals/upload-verification"),
+                          },
+                        ]
+                      );
+                    } else {
+                      router.push("/modals/product-form");
+                    }
+                  }}
+                >
+                  <Text style={styles.editButtonText}>Add Product</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -283,44 +288,57 @@ if (userData?.verified === true || verification === "approved") {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionTitle}>My Products</Text>
-          {myProducts.length === 0 && (
-            <Text style={{ color: "#888", paddingHorizontal: 20, marginBottom: 20 }}>
-              You haven’t posted anything yet.
-            </Text>
+          {/* 👇 Hide My Products for Consumers */}
+          {userData?.userType?.toLowerCase() !== "consumer" && (
+            <>
+              <Text style={styles.sectionTitle}>My Products</Text>
+              {myProducts.length === 0 && (
+                <Text
+                  style={{
+                    color: "#888",
+                    paddingHorizontal: 20,
+                    marginBottom: 20,
+                  }}
+                >
+                  You haven’t posted anything yet.
+                </Text>
+              )}
+            </>
           )}
         </>
       }
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.cardImg} />
-          ) : (
-            <View style={[styles.cardImg, { backgroundColor: "#eee" }]} />
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardSub}>{item.category || "Uncategorized"}</Text>
-            <Text style={styles.cardPrice}>₱ {item.price}</Text>
+      renderItem={({ item }) =>
+        userData?.userType?.toLowerCase() === "consumer" ? null : (
+          <View style={styles.card}>
+            {item.imageUrl ? (
+              <Image source={{ uri: item.imageUrl }} style={styles.cardImg} />
+            ) : (
+              <View style={[styles.cardImg, { backgroundColor: "#eee" }]} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.cardSub}>{item.category || "Uncategorized"}</Text>
+              <Text style={styles.cardPrice}>₱ {item.price}</Text>
 
-            <View style={styles.cardActions}>
-              <TouchableOpacity
-                onPress={() =>
-                  router.push({
-                    pathname: "/modals/product-form",
-                    params: { id: item.id },
-                  })
-                }
-              >
-                <Text style={styles.link}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                <Text style={[styles.link, { color: "red" }]}>Delete</Text>
-              </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/modals/product-form",
+                      params: { id: item.id },
+                    })
+                  }
+                >
+                  <Text style={styles.link}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <Text style={[styles.link, { color: "red" }]}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )
+      }
     />
   );
 }
@@ -379,6 +397,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    minWidth: 120,
+    alignItems: "center",
   },
   editButtonText: { color: "#fff", fontWeight: "600" },
   optionGroup: { paddingHorizontal: 20, paddingVertical: 15 },
