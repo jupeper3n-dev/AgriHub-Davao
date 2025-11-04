@@ -35,6 +35,28 @@ export default function CommentsModal() {
   const [newComment, setNewComment] = useState("");
   const [replyTo, setReplyTo] = useState<any | null>(null);
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({});
+  const [postOwnerId, setPostOwnerId] = useState<string | null>(null);
+  const [postTitle, setPostTitle] = useState<string>("");
+
+  useEffect(() => {
+    if (!productId) return;
+
+    const fetchPostInfo = async () => {
+      try {
+        const postSnap = await getDoc(doc(db, "products", String(productId)));
+        if (postSnap.exists()) {
+          const data = postSnap.data();
+          setPostOwnerId(data.userId || null);
+          setPostTitle(data.title || "your post");
+        }
+      } catch (err) {
+        console.error("Error fetching post info:", err);
+      }
+    };
+
+    fetchPostInfo();
+  }, [productId]);
+
 
   // Load all comments
   useEffect(() => {
@@ -70,7 +92,7 @@ export default function CommentsModal() {
         userData.profileImage ||
         "https://cdn-icons-png.flaticon.com/512/847/847969.png";
 
-      await addDoc(collection(db, "products", String(productId), "comments"), {
+      const commentRef = await addDoc(collection(db, "products", String(productId), "comments"), {
         userId: user.uid,
         userName,
         userPhoto: photoURL,
@@ -79,6 +101,43 @@ export default function CommentsModal() {
         parentId: replyTo ? replyTo.id : null,
         createdAt: serverTimestamp(),
       });
+
+      try {
+        const actorData = { fullName: userName, photoURL };
+
+        if (postOwnerId && postOwnerId !== user.uid) {
+          await addDoc(collection(db, "notifications", postOwnerId, "items"), {
+            type: "post",
+            subtype: "comment",
+            postId: productId,
+            postTitle,
+            actorId: user.uid,
+            actorName: actorData.fullName,
+            actorPhoto: actorData.photoURL,
+            message: `${actorData.fullName} commented on your post "${postTitle}"`,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        if (replyTo && replyTo.userId && replyTo.userId !== user.uid) {
+          await addDoc(collection(db, "notifications", replyTo.userId, "items"), {
+            type: "post",
+            subtype: "reply",
+            postId: productId,
+            postTitle,
+            actorId: user.uid,
+            actorName: actorData.fullName,
+            actorPhoto: actorData.photoURL,
+            message: `${actorData.fullName} replied to your comment in "${postTitle}"`,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        }
+      } catch (notifErr) {
+        console.error("Notification error:", notifErr);
+      }
+      // --------------------------------------------------------
 
       setNewComment("");
       setReplyTo(null);

@@ -15,7 +15,7 @@ export default function UploadVerification() {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
 
-  // 🔍 Load verification status
+  // Load verification status
   useEffect(() => {
     const fetchStatus = async () => {
       const user = auth.currentUser;
@@ -122,7 +122,7 @@ export default function UploadVerification() {
         {frontUri ? (
           <Image source={{ uri: frontUri }} style={styles.preview} />
         ) : (
-          <Text style={{ color: "#1E88E5" }}>📄 Upload Front ID</Text>
+          <Text style={{ color: "#1E88E5" }}> Upload Front ID</Text>
         )}
       </TouchableOpacity>
 
@@ -134,7 +134,7 @@ export default function UploadVerification() {
         {backUri ? (
           <Image source={{ uri: backUri }} style={styles.preview} />
         ) : (
-          <Text style={{ color: "#1E88E5" }}>📄 Upload Back ID</Text>
+          <Text style={{ color: "#1E88E5" }}> Upload Back ID</Text>
         )}
       </TouchableOpacity>
 

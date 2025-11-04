@@ -42,6 +42,8 @@ export default function ProfileScreen() {
   const [verification, setVerification] = useState<
     "pending" | "approved" | "rejected" | null
   >(null);
+  const [declineReason, setDeclineReason] = useState<string | null>(null);
+  const [showReason, setShowReason] = useState(false);
 
   const router = useRouter();
   const { refresh } = useLocalSearchParams();
@@ -62,7 +64,7 @@ export default function ProfileScreen() {
       };
 
       try {
-        // 👤 User data listener
+        // User data listener
         subscribeSafely(() =>
           onSnapshot(doc(db, "users", user.uid), (snap) => {
             if (!isActive) return;
@@ -71,21 +73,25 @@ export default function ProfileScreen() {
           })
         );
 
-        // 🪪 Verification listener
+        // Verification listener
         subscribeSafely(() =>
           onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
             if (!isActive) return;
             if (snap.exists()) {
-              setVerification(snap.data().status);
+              const data = snap.data();
+              setVerification(data.status);
+              setDeclineReason(data.declineReason || null);
             } else if (userData?.verified) {
               setVerification("approved");
+              setDeclineReason(null);
             } else {
               setVerification(null);
+              setDeclineReason(null);
             }
           })
         );
 
-        // 🛒 Products listener
+        // Products listener
         subscribeSafely(() => {
           const q = query(
             collection(db, "products"),
@@ -103,7 +109,7 @@ export default function ProfileScreen() {
         console.error("Firestore subscription error:", e);
       }
 
-      // 🧹 Cleanup when screen unfocuses
+      // Cleanup when screen unfocuses
       return () => {
         console.log("Cleaning up Profile listeners...");
         isActive = false;
@@ -160,9 +166,19 @@ export default function ProfileScreen() {
     );
   }
 
-// Unified verification status
-let statusLabel = "Not Verified"; // default
-let statusColor = "#E53935"; // red
+let statusLabel = "Not Verified";
+let statusColor = "#E53935";
+
+if (userData?.verified === true || verification === "approved") {
+  statusLabel = "Verified";
+  statusColor = "#4CAF50"; // green
+} else if (verification === "pending") {
+  statusLabel = "Pending Verification";
+  statusColor = "#FFC107"; // yellow
+} else if (verification === "rejected") {
+  statusLabel = "Rejected";
+  statusColor = "#E53935"; // red
+}
 
 if (userData?.verified === true || verification === "approved") {
   statusLabel = "Verified";
@@ -205,6 +221,7 @@ if (userData?.verified === true || verification === "approved") {
               {statusLabel}
             </Text>
 
+            {/* Hide upload button if rejected */}
             {statusLabel === "Not Verified" && (
               <TouchableOpacity
                 style={styles.verifyBtn}
@@ -213,6 +230,23 @@ if (userData?.verified === true || verification === "approved") {
                 <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
                 <Text style={styles.verifyBtnText}>Verify Account</Text>
               </TouchableOpacity>
+            )}
+
+            {/* Rejected users — show reason link */}
+            {statusLabel === "Rejected" && (
+              <>
+                <TouchableOpacity onPress={() => setShowReason(!showReason)}>
+                  <Text style={styles.reasonLink}>
+                    {showReason ? "Hide reason" : "View reason"}
+                  </Text>
+                </TouchableOpacity>
+                {showReason && declineReason && (
+                  <View style={styles.reasonBox}>
+                    <Text style={styles.reasonTitle}>Reason for Rejection:</Text>
+                    <Text style={styles.reasonText}>{declineReason}</Text>
+                  </View>
+                )}
+              </>
             )}
 
             <View
@@ -292,7 +326,7 @@ if (userData?.verified === true || verification === "approved") {
             </TouchableOpacity>
           </View>
 
-          {/* 👇 Hide My Products for Consumers */}
+          {/* Hide My Products for Consumers */}
           {userData?.userType?.toLowerCase() !== "consumer" && (
             <>
               <Text style={styles.sectionTitle}>My Products</Text>
@@ -439,4 +473,31 @@ const styles = StyleSheet.create({
   cardPrice: { fontWeight: "700", color: "#43A047", marginTop: 6 },
   cardActions: { flexDirection: "row", gap: 16, marginTop: 8 },
   link: { color: "#43A047", fontWeight: "600" },
+  reasonLink: {
+  color: "#1E88E5",
+  marginTop: 6,
+  textDecorationLine: "underline",
+  fontWeight: "500",
+  },
+  reasonBox: {
+    backgroundColor: "#fdecea",
+    borderLeftWidth: 4,
+    borderLeftColor: "#E53935",
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    width: "85%",
+    alignSelf: "center",
+  },
+  reasonTitle: {
+    color: "#E53935",
+    fontWeight: "bold",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  reasonText: {
+    color: "#333",
+    fontSize: 13,
+    textAlign: "center",
+  },
 });

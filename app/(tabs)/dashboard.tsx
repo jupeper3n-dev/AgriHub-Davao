@@ -8,6 +8,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -15,7 +16,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
+  where
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -126,11 +127,55 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Home");
+  const [unreadChats, setUnreadChats] = useState(0);
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const q = query(
+      collection(db, "notifications", user.uid, "items"),
+      where("read", "==", false)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setUnreadNotifications(snap.size);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const q = query(collection(db, "chats"), where("members", "array-contains", user.uid));
+
+  const unsub = onSnapshot(q, (snap) => {
+    let unread = 0;
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const lastSender = data.lastSenderId;
+      const lastStatus = data.lastMessageStatus;
+
+      // Count as unread if the last message was NOT sent by me and NOT read yet
+      if (lastSender !== user.uid && lastStatus !== "read") {
+        unread++;
+      }
+    });
+
+    setUnreadChats(unread);
+  });
+
+  return () => unsub();
+}, []);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -141,13 +186,6 @@ export default function DashboardScreen() {
       if (!snap.exists()) return;
       const role = snap.data().userType || "Store Owner";
       setUserRole(role);
-
-      setTimeout(() => {
-        if (role === "Admin") {
-          console.log("Admin detected, redirecting to admin panel...");
-          router.replace("../admin-panel");
-        }
-      }, 300);
     });
 
     return () => unsub();
@@ -220,14 +258,36 @@ export default function DashboardScreen() {
 
       const ref = doc(db, "products", item.id);
       const currentLikes = item.likes || [];
-      const updatedLikes = currentLikes.includes(user.uid)
+      const isLiked = currentLikes.includes(user.uid);
+      const updatedLikes = isLiked
         ? currentLikes.filter((id: string) => id !== user.uid)
         : [...currentLikes, user.uid];
+
       await updateDoc(ref, { likes: updatedLikes });
+
+      if (!isLiked && item.userId !== user.uid) {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const actorData = userDoc.exists() ? userDoc.data() : {};
+
+        await addDoc(collection(db, "notifications", item.userId, "items"), {
+          type: "post",
+          subtype: "like",
+          postId: item.id,
+          postTitle: item.title || "your post",
+          actorId: user.uid,
+          actorName: actorData.fullName || "Someone",
+          actorPhoto: actorData.photoURL || null,
+          message: `${actorData.fullName || "Someone"} liked your post ${
+            item.title || ""
+          }`,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (err: any) {
       console.error("Reaction error:", err);
     }
-  };
+};
 
   const handleComments = (item: any) => {
     if (!canInteractWith(item.category)) {
@@ -487,21 +547,44 @@ export default function DashboardScreen() {
       </View>
 
       <View style={styles.navbar}>
-        {["Home", "Messages"].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, activeTab === tab && styles.navItemActive]}
-            onPress={() =>
-              tab === "Messages" ? router.push("../chats") : setActiveTab(tab)
-            }
-          >
-            <Text
-              style={[styles.navText, activeTab === tab && styles.navTextActive]}
+        {["Home", "Messages", "Notifications"].map((tab) => {
+          const isActive = activeTab === tab;
+          const showBadge =
+            (tab === "Messages" && unreadChats > 0) ||
+            (tab === "Notifications" && unreadNotifications > 0);
+          const badgeCount =
+            tab === "Messages" ? unreadChats : unreadNotifications;
+
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.navItem, isActive && styles.navItemActive]}
+              onPress={() => {
+                if (tab === "Messages") {
+                  router.push("../chats");
+                } else if (tab === "Notifications") {
+                  router.push("/notifications");
+                } else {
+                  setActiveTab(tab);
+                }
+              }}
             >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={[styles.navText, isActive && styles.navTextActive]}>
+                  {tab}
+                </Text>
+
+                {showBadge && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {badgeCount > 99 ? "99+" : badgeCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
       
       <View style={styles.container}>
@@ -710,5 +793,17 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
     borderRadius: 20,
     padding: 6,
-  },
+  },badge: {
+  minWidth: 28,
+  height: 24,
+  borderRadius: 9,
+  backgroundColor: "#E53935",
+  alignItems: "center",
+  justifyContent: "center",
+},
+badgeText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "bold",
+},
 });

@@ -23,7 +23,7 @@ export default function ProductDetailsModal() {
   useEffect(() => {
     const id = params.id || params.productId;
     if (!id) {
-      console.warn("⚠️ No product ID found in params");
+      console.warn(" No product ID found in params");
       return;
     }
 
@@ -35,7 +35,7 @@ export default function ProductDetailsModal() {
         if (snap.exists()) {
           const data = snap.data();
 
-          // ✅ Use the same URL the dashboard card shows
+          // Use the same URL the dashboard card shows
           const validUrl =
             typeof data.imageUrl === "string"
               ? data.imageUrl
@@ -45,13 +45,13 @@ export default function ProductDetailsModal() {
 
           if (validUrl) {
             setImageFromDb(validUrl);
-            console.log("✅ Loaded image from Firestore:", validUrl);
+            console.log(" Loaded image from Firestore:", validUrl);
           } else {
-            console.warn("⚠️ No imageUrl in Firestore for", id);
+            console.warn(" No imageUrl in Firestore for", id);
           }
         }
       } catch (err) {
-        console.error("🔥 Error fetching image from Firestore:", err);
+        console.error(" Error fetching image from Firestore:", err);
       }
     })();
   }, []);
@@ -70,7 +70,7 @@ export default function ProductDetailsModal() {
     imageUrl,
   } = params;
 
-  // ✅ Use same image as Dashboard (no decoding/re-encoding)
+  // Use same image as Dashboard (no decoding/re-encoding)
   const finalImage = imageFromDb || null;
 
   return (
@@ -85,7 +85,7 @@ export default function ProductDetailsModal() {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* ✅ Simplified Image Section */}
+          {/* Simplified Image Section */}
         {finalImage ? (
           <TouchableOpacity
             activeOpacity={0.9}
@@ -96,8 +96,8 @@ export default function ProductDetailsModal() {
               style={styles.image}
               resizeMode="cover"
               onError={(e) => {
-                console.log("❌ Image load error:", e.nativeEvent.error);
-                console.log("🧭 Image URL:", finalImage);
+                console.log(" Image load error:", e.nativeEvent.error);
+                console.log(" Image URL:", finalImage);
               }}
             />
           </TouchableOpacity>

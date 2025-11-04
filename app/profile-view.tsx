@@ -101,6 +101,11 @@ export default function ProfileView() {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const isBanned = userInfo?.banned === true;
+  const isSuspended =
+    userInfo?.suspendedUntil
+      ? ((userInfo.suspendedUntil.toDate?.() || new Date(userInfo.suspendedUntil)) > new Date())
+      : false;
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -348,6 +353,31 @@ export default function ProfileView() {
           userId: me,
           followedAt: serverTimestamp(),
         });
+
+        // ✅ Send follow notification
+        try {
+          if (currentUser.uid !== target) {
+            const userSnap = await getDoc(doc(db, "users", currentUser.uid));
+            const userData = userSnap.exists() ? userSnap.data() : {};
+            const actorName = userData.fullName || "Someone";
+            const actorPhoto =
+              userData.photoURL ||
+              userData.profileImage ||
+              "https://cdn-icons-png.flaticon.com/512/847/847969.png";
+
+            await addDoc(collection(db, "notifications", target, "items"), {
+              type: "follow",
+              actorId: currentUser.uid,
+              actorName,
+              actorPhoto,
+              message: `${actorName} started following you`,
+              read: false,
+              createdAt: serverTimestamp(),
+            });
+          }
+        } catch (notifErr) {
+          console.error("Follow notification error:", notifErr);
+        }
       }
     } catch (err: any) {
       console.error("toggleFollow error:", err);
@@ -625,7 +655,6 @@ export default function ProfileView() {
             👥 Followers: {followerCount}  •  ⭐ {avgRating.toFixed(1)} ({ratingsCount})
             </Text>
 
-            {/* Rate this user */}
             {currentUser?.uid !== userId && (
             <View style={styles.rateRow}>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -669,6 +698,31 @@ export default function ProfileView() {
                     },
                     { merge: true }
                     );
+
+                    // ✅ Send rating notification
+                    if (userId !== currentUser.uid) {
+                      try {
+                        const raterSnap = await getDoc(doc(db, "users", currentUser.uid));
+                        const raterData = raterSnap.exists() ? raterSnap.data() : {};
+                        const raterName = raterData.fullName || "Someone";
+                        const raterPhoto =
+                          raterData.photoURL ||
+                          raterData.profileImage ||
+                          "https://cdn-icons-png.flaticon.com/512/847/847969.png";
+                        await addDoc(collection(db, "notifications", String(userId), "items"), {
+                          actorId: currentUser.uid,
+                          actorName: raterName,
+                          actorPhoto: raterPhoto,
+                          type: "rating",
+                          rating: n,
+                          message: `${raterName} rated you ${n} star${n > 1 ? "s" : ""}.`,
+                          read: false,
+                          createdAt: serverTimestamp(),
+                        });
+                      } catch (err) {
+                        console.error("Rating notification error:", err);
+                      }
+                    }
                 } catch (err) {
                     console.error("Rating error:", err);
                     Alert.alert("Error", "Unable to save rating.");
@@ -717,19 +771,56 @@ export default function ProfileView() {
                 <Text style={styles.msgText}>Message</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.reportBtn,
-                  hasReported && { backgroundColor: "#ccc" },
-                ]}
-                disabled={hasReported}
-                onPress={() => setReportModalVisible(true)}
-              >
-                <Text style={styles.reportText}>
-                  {hasReported ? "Reported" : "Report"}
-                </Text>
-              </TouchableOpacity>
+                {currentUser?.uid !== userId && (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.followBtn,
+                        isFollowing && { backgroundColor: "#43A047" },
+                      ]}
+                      onPress={toggleFollow}
+                    >
+                      <Text style={styles.followText}>
+                        {isFollowing ? "Following" : "+ Follow"}
+                      </Text>
+                    </TouchableOpacity>
 
+                    <TouchableOpacity style={styles.msgBtn} onPress={startChat}>
+                      <Text style={styles.msgText}>Message</Text>
+                    </TouchableOpacity>
+
+                    {/* Dynamic Report/Ban/Suspend Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.reportBtn,
+                        isBanned
+                          ? { backgroundColor: "#757575" } // gray
+                          : isSuspended
+                          ? { backgroundColor: "#8E24AA" } // purple
+                          : hasReported
+                          ? { backgroundColor: "#9e9e9e" } // gray (reported)
+                          : { backgroundColor: "#E53935" }, // red (report)
+                      ]}
+                      disabled={isBanned || isSuspended || hasReported}
+                      onPress={() => {
+                        if (!isBanned && !isSuspended && !hasReported) {
+                          setReportModalVisible(true);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.reportText}>
+                        {isBanned
+                          ? "Banned"
+                          : isSuspended
+                          ? "Suspended"
+                          : hasReported
+                          ? "Reported"
+                          : "Report"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
             </View>
           )}
         </View>
@@ -861,7 +952,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingLeft: 16},
   backBtn: {   flexDirection: "row",
   alignItems: "center",
-  marginBottom: 10,},
+  marginBottom: 10,marginTop: -20},
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
   loadingOverlay: {

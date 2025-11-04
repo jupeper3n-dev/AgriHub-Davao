@@ -148,7 +148,7 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 🗺️ Map */}
+      {/* Map */}
       <MapView
         style={styles.map}
         region={region}
@@ -184,7 +184,7 @@ export default function MapScreen() {
                   />
                 );
               } catch (err) {
-                console.warn("⚠️ Skipped invalid item:", item, err);
+                console.warn(" Skipped invalid item:", item, err);
                 return null;
               }
             })}
@@ -256,7 +256,7 @@ export default function MapScreen() {
                     if (selectedProduct?.imageUrl && typeof selectedProduct.imageUrl === "string") {
                       setFullscreenImage(selectedProduct.imageUrl);
                     } else {
-                      console.warn("⚠️ No image URL found for product:", selectedProduct);
+                      console.warn(" No image URL found for product:", selectedProduct);
                     }
                   }}
                 >
@@ -309,7 +309,7 @@ export default function MapScreen() {
                   <Text style={styles.modalDesc}>{selectedProduct.description}</Text>
                 ) : null}
 
-                {/* 🧾 Specs */}
+                {/* Specs */}
                 {selectedProduct?.spec && (
                   <View style={{ marginTop: 6 }}>
                     <Text style={{ fontWeight: "bold", color: "#333" }}>Specifications:</Text>
@@ -343,7 +343,7 @@ export default function MapScreen() {
                       },
                     });
                   } else {
-                    console.warn("⚠️ Product has no valid location:", selectedProduct);
+                    console.warn(" Product has no valid location:", selectedProduct);
                   }
                   setSelectedProduct(null);
                 }}
@@ -363,7 +363,7 @@ export default function MapScreen() {
             </View>
           </View>
 
-          {/* 🔍 Fullscreen Image Viewer */}
+          {/* Fullscreen Image Viewer */}
           <Modal
             visible={!!fullscreenImage}
             transparent

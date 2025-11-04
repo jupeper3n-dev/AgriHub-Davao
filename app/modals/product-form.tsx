@@ -78,7 +78,7 @@ export default function ProductForm() {
       // keep track of whether the component is still mounted
       let isActive = true;
 
-      console.log("📡 Subscribing to product:", id);
+      console.log(" Subscribing to product:", id);
 
       // Subscribe to Firestore snapshot
       const unsubscribe = onSnapshot(
@@ -101,14 +101,14 @@ export default function ProductForm() {
           setLoading(false);
         },
         (error) => {
-          console.error("🔥 Firestore listener error:", error.message);
+          console.error(" Firestore listener error:", error.message);
           setLoading(false);
         }
       );
 
       // cleanup on unmount
       return () => {
-        console.log("🧹 Cleaning up listener for:", id);
+        console.log(" Cleaning up listener for:", id);
         isActive = false;
         unsubscribe(); // stop the listener immediately
       };
@@ -213,7 +213,7 @@ export default function ProductForm() {
           updatedAt: serverTimestamp(),
         });
       } else {
-        // 🆕 Create new
+        // Create new
         const userSnap = await getDoc(doc(db, "users", user.uid));
         const userData = userSnap.exists() ? userSnap.data() : {};
         const userType = (userData as any).userType || "Store Owner";

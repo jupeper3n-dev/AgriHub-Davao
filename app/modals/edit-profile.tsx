@@ -36,6 +36,13 @@ export default function EditProfile() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [passwordRules, setPasswordRules] = useState({
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    isLongEnough: false,
+  });
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -84,8 +91,21 @@ export default function EditProfile() {
   };
 
   const isPasswordStrong = (pwd: string) => {
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{10,}$/;
-    return regex.test(pwd);
+    // Regular expression for password validation
+    const regexUppercase = /[A-Z]/;
+    const regexLowercase = /[a-z]/;
+    const regexNumber = /\d/;
+    const isLongEnough = pwd.length >= 8;
+
+    // Update the password validation states
+    setPasswordRules({
+      hasUppercase: regexUppercase.test(pwd),
+      hasLowercase: regexLowercase.test(pwd),
+      hasNumber: regexNumber.test(pwd),
+      isLongEnough,
+    });
+
+    return regexUppercase.test(pwd) && regexLowercase.test(pwd) && regexNumber.test(pwd) && isLongEnough;
   };
 
   const saveProfile = async () => {
@@ -96,11 +116,12 @@ export default function EditProfile() {
         return Alert.alert("Required", "Full name cannot be empty.");
       }
 
+      // Check for password change and validation
       if (form.password.trim().length > 0) {
         if (!isPasswordStrong(form.password)) {
           return Alert.alert(
             "Weak Password",
-            "Password must be at least 10 characters long and include:\n• 1 uppercase letter\n• 1 lowercase letter\n• 1 number"
+            "Password must be at least 8 characters long and include:\n• 1 uppercase letter\n• 1 lowercase letter\n• 1 number"
           );
         }
         if (form.password !== confirmPassword) {
@@ -111,6 +132,7 @@ export default function EditProfile() {
       setSaving(true);
       const newPhotoURL = await uploadPhoto(user.uid);
 
+      // Update user profile info in Firestore
       await updateDoc(doc(db, "users", user.uid), {
         fullName: form.fullName,
         email: form.email,
@@ -118,15 +140,23 @@ export default function EditProfile() {
         photoURL: newPhotoURL,
       });
 
+      // Update password if it's been changed
       if (form.password.trim().length > 0) {
         await updatePassword(user, form.password);
       }
 
-      Alert.alert("Success", "Profile updated successfully.");
-      router.replace({
-        pathname: "/(tabs)/profile",
-        params: { refresh: "true" },
-      });
+      // If password is updated, log out and prompt for re-login
+      if (form.password.trim().length > 0) {
+        await auth.signOut();
+        Alert.alert("Success", "Password updated. Please log in again.");
+        router.replace("/login"); // You may redirect to login screen
+      } else {
+        Alert.alert("Success", "Profile updated successfully.");
+        router.replace({
+          pathname: "/(tabs)/profile",
+          params: { refresh: "true" },
+        });
+      }
     } catch (err: any) {
       console.error(err);
       Alert.alert("Error", err.message);
@@ -165,9 +195,7 @@ export default function EditProfile() {
         {imgLocalUri || form.photoURL ? (
           <Image source={{ uri: imgLocalUri || form.photoURL }} style={styles.avatar} />
         ) : (
-          <Text style={{ color: "#4A8C2A", fontWeight: "600" }}>
-            + Select Profile Picture
-          </Text>
+          <Text style={{ color: "#4A8C2A", fontWeight: "600" }}>+ Select Profile Picture</Text>
         )}
       </TouchableOpacity>
 
@@ -198,11 +226,7 @@ export default function EditProfile() {
           secureTextEntry={!showPassword}
           onChangeText={(v) => setForm({ ...form, password: v })}
         />
-        <TouchableOpacity
-          onPress={() => setShowPassword(!showPassword)}
-          style={styles.eyeButton}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton} activeOpacity={0.7}>
           <Ionicons
             name={showPassword ? "eye" : "eye-off"}
             size={22}
@@ -224,11 +248,7 @@ export default function EditProfile() {
           secureTextEntry={!showConfirmPassword}
           onChangeText={setConfirmPassword}
         />
-        <TouchableOpacity
-          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-          style={styles.eyeButton}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton} activeOpacity={0.7}>
           <Ionicons
             name={showConfirmPassword ? "eye" : "eye-off"}
             size={22}
@@ -237,17 +257,27 @@ export default function EditProfile() {
         </TouchableOpacity>
       </View>
 
-      {confirmPassword.length > 0 && (
-        <Text style={[styles.matchText, { color: passwordMatchColor }]}>
-          {passwordMatchMessage}
+      {/* Password strength rules */}
+      <View style={styles.passwordRulesContainer}>
+        <Text style={{ color: passwordRules.hasUppercase ? "#4CAF50" : "#E53935" }}>
+          {passwordRules.hasUppercase ? "" : ""} At least one uppercase letter
         </Text>
+        <Text style={{ color: passwordRules.hasLowercase ? "#4CAF50" : "#E53935" }}>
+          {passwordRules.hasLowercase ? "" : ""} At least one lowercase letter
+        </Text>
+        <Text style={{ color: passwordRules.hasNumber ? "#4CAF50" : "#E53935" }}>
+          {passwordRules.hasNumber ? "" : ""} At least one number
+        </Text>
+        <Text style={{ color: passwordRules.isLongEnough ? "#4CAF50" : "#E53935" }}>
+          {passwordRules.isLongEnough ? "" : ""} At least 8 characters long
+        </Text>
+      </View>
+
+      {confirmPassword.length > 0 && (
+        <Text style={[styles.matchText, { color: passwordMatchColor }]}>{passwordMatchMessage}</Text>
       )}
 
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-        onPress={saveProfile}
-        disabled={saving}
-      >
+      <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={saveProfile} disabled={saving}>
         <Text style={styles.saveText}>{saving ? "Saving..." : "Save Changes"}</Text>
       </TouchableOpacity>
 
@@ -319,4 +349,11 @@ const styles = StyleSheet.create({
   saveText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   cancelBtn: { marginTop: 14, alignItems: "center", paddingVertical: 12 },
   cancelText: { color: "#888", fontSize: 15 },
+  passwordRulesContainer: {
+  marginTop: 12,
+  marginBottom: 20,
+  paddingLeft: 10,
+  paddingRight: 10,
+},
+
 });
