@@ -74,7 +74,7 @@ export default function SearchUsers() {
     }
   };
 
-  // 🔹 Case-insensitive User Search
+  // Case-insensitive User Search
   const handleUserSearch = async () => {
     const keyword = search.trim();
     let resultsList: any[] = [];
@@ -127,7 +127,7 @@ export default function SearchUsers() {
     setResults(filtered);
   };
 
-  // 🔹 Case-insensitive Product Search
+  // Case-insensitive Product Search
   const handleProductSearch = async () => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return;

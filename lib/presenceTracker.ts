@@ -119,7 +119,7 @@ export const setupPresence = () => {
 
     // Prevent duplicate initialization
     if (initializedForUser === user.uid) {
-      console.log("⚠️ Presence already active for", user.uid);
+      console.log(" Presence already active for", user.uid);
       return;
     }
     initializedForUser = user.uid;
@@ -187,7 +187,7 @@ export const setupPresence = () => {
           await safeSet(rtdbRef, onlineRTDB);
           await setDoc(userRef, onlineFirestore, { merge: true });
         } else if (state === "background" || state === "inactive") {
-          console.log("📴 App background/inactive — marking offline...");
+          console.log(" App background/inactive — marking offline...");
           await safeSet(rtdbRef, offlineRTDB);
           await new Promise((res) => setTimeout(res, 500));
           goOffline(getDatabase());

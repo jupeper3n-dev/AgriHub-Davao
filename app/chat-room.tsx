@@ -167,7 +167,7 @@ export default function ChatRoom() {
           setMessages(list);
           setLoading(false);
 
-          // ✅ Smooth scroll after layout
+          // Smooth scroll after layout
           requestAnimationFrame(() => {
             setTimeout(() => {
               flatListRef.current?.scrollToEnd({ animated: true });
@@ -232,7 +232,7 @@ export default function ChatRoom() {
 
     // Proper cleanup
     return () => {
-      console.log("🧹 Unsubscribing chat listener:", chatId);
+      console.log(" Unsubscribing chat listener:", chatId);
       if (unsub) unsub();
     };
   }, [chatId]);
@@ -302,7 +302,7 @@ export default function ChatRoom() {
       setUploading(true);
       setUploadProgress(0);
 
-      console.log("📤 Upload start. uri:", uri);
+      console.log(" Upload start. uri:", uri);
 
       // More reliable on Expo/Android
       const res = await fetch(uri);
@@ -472,10 +472,10 @@ export default function ChatRoom() {
             <Text style={styles.statusText}>
               {userStatus.isOnline
                 ? "🟢 Online"
-                : `⚪ Active ${getTimeAgo(userStatus.lastSeen)} ago`}
+                : ` Active ${getTimeAgo(userStatus.lastSeen)} ago`}
             </Text>
           ) : (
-            <Text style={styles.statusText}>⚪ Offline</Text>
+            <Text style={styles.statusText}> Offline</Text>
           )}
         </TouchableOpacity>
       </View>

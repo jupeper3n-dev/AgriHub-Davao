@@ -47,9 +47,6 @@ export default function Index() {
   // Not logged in → go to login
   if (role === "guest") return <Redirect href="/login" />;
 
-  // Admin → go to admin panel
-  if (role === "Admin") return <Redirect href="/admin-panel" />;
-
   // Default → normal dashboard
   return <Redirect href="/(tabs)/dashboard" />;
 }

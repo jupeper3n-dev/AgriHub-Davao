@@ -112,12 +112,8 @@ export default function LoginScreen() {
           await AsyncStorage.removeItem("rememberedEmail");
         }
 
-        // Step 6: Navigate based on user role AFTER all checks
-        if (data.userType === "Admin") {
-          router.replace("/admin-panel");
-        } else {
-          router.replace("/(tabs)/dashboard");
-        }
+        // Navigate based on user role AFTER all checks
+        router.replace("/(tabs)/dashboard");
 
         Alert.alert("Welcome back!", `Logged in as ${user.email}`);
 

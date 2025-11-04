@@ -124,7 +124,7 @@ export default function NotificationsScreen() {
             ) : null}
         </Text>
 
-        {/* ✅ Add this block for status badge */}
+        {/* Add this block for status badge */}
         {item.type === "verification" && (
             <View style={styles.verificationStatus}>
             <Ionicons

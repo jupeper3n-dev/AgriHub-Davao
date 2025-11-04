@@ -95,7 +95,7 @@ export default function SavedPosts() {
   const router = useRouter();
   const user = auth.currentUser;
 
-  // ✅ Real-time load saved posts
+  // Real-time load saved posts
   useEffect(() => {
     if (!user) {
       Alert.alert("Not logged in", "Please log in to view saved posts.");
@@ -122,7 +122,7 @@ export default function SavedPosts() {
     return () => unsub();
   }, [user]);
 
-  // ✅ Unsave post
+  // Unsave post
   const handleUnsave = async (id: string) => {
     try {
       if (!user) return;
@@ -134,7 +134,7 @@ export default function SavedPosts() {
     }
   };
 
-  // ✅ Like post (with animated icon)
+  // Like post (with animated icon)
   const toggleReaction = async (item: any, index: number) => {
     const user = auth.currentUser;
     if (!user) {
@@ -151,7 +151,7 @@ export default function SavedPosts() {
 
       await updateDoc(ref, { likes: updatedLikes });
 
-      // ✅ Instant UI update
+      // Instant UI update
       setSavedPosts((prev) => {
         const updated = [...prev];
         updated[index] = { ...item, likes: updatedLikes };

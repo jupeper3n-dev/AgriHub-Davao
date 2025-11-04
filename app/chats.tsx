@@ -121,7 +121,7 @@ export default function Chats() {
         setLoading(false);
       },
       (error) => {
-        console.error("🔥 Error fetching chats:", error);
+        console.error(" Error fetching chats:", error);
         setLoading(false);
       }
     );
@@ -198,7 +198,7 @@ export default function Chats() {
         chatRef,
         {
           members: [me, them],
-          lastMessage: "Say hi 👋",
+          lastMessage: "Say hi ",
           lastSenderId: me,
           updatedAt: serverTimestamp(),
         },
@@ -363,7 +363,7 @@ export default function Chats() {
 
                     <View style={styles.messageBlock}>
                       <Text style={styles.lastMessage} numberOfLines={1}>
-                        {item.lastMessage || "Say hi 👋"}
+                        {item.lastMessage || "Say hi "}
                       </Text>
                       <Text style={styles.lastSeen}>{statusLine}</Text>
                     </View>

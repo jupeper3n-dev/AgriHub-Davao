@@ -223,7 +223,7 @@ export default function ProfileView() {
         if (snap.exists()) setUserInfo(snap.data());
         else Alert.alert("User Not Found", "This user profile no longer exists.");
       } catch (err: any) {
-        console.error("🔥 Error loading user:", err.message || err);
+        console.error(" Error loading user:", err.message || err);
         Alert.alert("Error", "Unable to load user profile.");
       } finally {
         setLoading(false);
@@ -354,7 +354,7 @@ export default function ProfileView() {
           followedAt: serverTimestamp(),
         });
 
-        // ✅ Send follow notification
+        // Send follow notification
         try {
           if (currentUser.uid !== target) {
             const userSnap = await getDoc(doc(db, "users", currentUser.uid));
@@ -652,7 +652,7 @@ export default function ProfileView() {
           <Text style={styles.email}>{userInfo.email}</Text>
 
             <Text style={styles.metaLine}>
-            👥 Followers: {followerCount}  •  ⭐ {avgRating.toFixed(1)} ({ratingsCount})
+            Followers: {followerCount}  •  {avgRating.toFixed(1)} ({ratingsCount})
             </Text>
 
             {currentUser?.uid !== userId && (
@@ -699,7 +699,7 @@ export default function ProfileView() {
                     { merge: true }
                     );
 
-                    // ✅ Send rating notification
+                    // Send rating notification
                     if (userId !== currentUser.uid) {
                       try {
                         const raterSnap = await getDoc(doc(db, "users", currentUser.uid));
@@ -736,12 +736,12 @@ export default function ProfileView() {
                     color: n <= (myRating || 0) ? "#FFD700" : "#C7C7C7",
                     }}
                 >
-                    ★
+                   
                 </Text>
                 </TouchableOpacity>
             ))}
             <Text style={{ marginLeft: 8, color: "#555" }}>
-                {myRating ? `You rated: ${myRating}⭐` : "Tap to rate"}
+                {myRating ? `You rated: ${myRating}` : "Tap to rate"}
             </Text>
             </View>
             )}
@@ -827,7 +827,7 @@ export default function ProfileView() {
       )}
 
         {showAllPosts ? (
-          // 🔹 Full-screen expanded posts view
+          // Full-screen expanded posts view
           <Modal visible={showAllPosts} animationType="slide" transparent={false}>
             <SafeAreaView style={styles.fullscreenContainer}>
               <View style={styles.fullscreenHeader}>
@@ -855,7 +855,7 @@ export default function ProfileView() {
             </SafeAreaView>
           </Modal>
         ) : (
-          // 🔹 Regular compact section
+          // Regular compact section
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Posts by this user</Text>
@@ -933,7 +933,7 @@ export default function ProfileView() {
               resizeMode="contain"
             />
 
-            {/* ✅ Close Button */}
+            {/* Close Button */}
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setImageModalVisible(false)}

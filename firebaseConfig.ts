@@ -8,7 +8,7 @@ import {
 } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { Firestore, getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // ✅ Import storage
+import { getStorage } from "firebase/storage"; // Import storage
 import { Platform } from "react-native";
 
 // Load config from app.json (under "extra.firebase")
@@ -25,7 +25,7 @@ if (getApps().length === 0) {
   app = getApp();
 }
 
-// ✅ Initialize Auth safely for React Native + Web
+// Initialize Auth safely for React Native + Web
 try {
   if (Platform.OS === "web") {
     auth = getAuth(app);
@@ -41,9 +41,9 @@ try {
   auth = getAuth(app);
 }
 
-// ✅ Firestore + Realtime DB + Storage
+// Firestore + Realtime DB + Storage
 const dbInstance = getFirestore(app);
 const rtdb = getDatabase(app);
-const storage = getStorage(app); // ✅ Add this line
+const storage = getStorage(app); // Add this line
 
-export { app, auth, dbInstance as db, rtdb, storage }; // ✅ Export storage
+export { app, auth, dbInstance as db, rtdb, storage }; // Export storage

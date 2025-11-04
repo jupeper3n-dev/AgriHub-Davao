@@ -208,7 +208,7 @@ export default function RegisterScreen() {
           </Picker>
         </View>
 
-        {/* ✅ Terms and Conditions */}
+        {/* Terms and Conditions */}
         <View style={styles.checkboxContainer}>
           <Pressable
             onPress={() => setAgreeTerms(!agreeTerms)}
@@ -227,7 +227,7 @@ export default function RegisterScreen() {
           </Text>
         </View>
 
-        {/* ✅ Terms Modal */}
+        {/* Terms Modal */}
         <Modal
           visible={modalVisible}
           animationType="slide"
