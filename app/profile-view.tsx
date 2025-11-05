@@ -729,15 +729,12 @@ export default function ProfileView() {
                 }
                 }}
                 >
-                <Text
-                    style={{
-                    fontSize: 26,
-                    marginHorizontal: 2,
-                    color: n <= (myRating || 0) ? "#FFD700" : "#C7C7C7",
-                    }}
-                >
-                   
-                </Text>
+                <Ionicons
+                      name={n <= (myRating || 0) ? "star" : "star-outline"}
+                      size={18}
+                      color={n <= (myRating || 0) ? "#FFD700" : "#C7C7C7"}
+                      style={{ marginHorizontal: 2 }}
+                    />
                 </TouchableOpacity>
             ))}
             <Text style={{ marginLeft: 8, color: "#555" }}>
@@ -755,22 +752,6 @@ export default function ProfileView() {
 
           {currentUser?.uid !== userId && (
             <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[
-                  styles.followBtn,
-                  isFollowing && { backgroundColor: "#43A047" },
-                ]}
-                onPress={toggleFollow}
-              >
-                <Text style={styles.followText}>
-                  {isFollowing ? "Following" : "+ Follow"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.msgBtn} onPress={startChat}>
-                <Text style={styles.msgText}>Message</Text>
-              </TouchableOpacity>
-
                 {currentUser?.uid !== userId && (
                   <View style={styles.actionRow}>
                     <TouchableOpacity
@@ -949,7 +930,7 @@ export default function ProfileView() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", paddingLeft: 16},
+  container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 16},
   backBtn: {   flexDirection: "row",
   alignItems: "center",
   marginBottom: 10,marginTop: -20},

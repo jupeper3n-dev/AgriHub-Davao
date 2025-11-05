@@ -60,7 +60,7 @@ export default function LoginScreen() {
         const userDoc = await getDoc(userRef);
 
         if (!userDoc.exists()) {
-          Alert.alert("Error", "User data not found in Firestore.");
+          Alert.alert("Error", "User not found.");
           await signOut(auth);
           setLoading(false);
           return;

@@ -1,6 +1,6 @@
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,20 +11,25 @@ import {
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
-const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM2YWQxMjI0YmM2ZDQ4MTNiYWQ3MjdkMGRjMTk1NDZjIiwiaCI6Im11cm11cjY0In0="; // Replace this with your actual ORS key
+const ORS_API_KEY =
+  "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM2YWQxMjI0YmM2ZDQ4MTNiYWQ3MjdkMGRjMTk1NDZjIiwiaCI6Im11cm11cjY0In0="; // Replace with your ORS key
 
 export default function ViewMapModal() {
   const { lat, lng, locationName } = useLocalSearchParams();
   const router = useRouter();
 
+  const mapRef = useRef<MapView>(null);
   const [userLocation, setUserLocation] = useState<any>(null);
   const [routeCoords, setRouteCoords] = useState<any[]>([]);
   const [distance, setDistance] = useState<string | null>(null);
   const [eta, setEta] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false); // new: shows silent updates
 
-  // Get user location
+  // ✅ 1. Watch user location every 10 seconds
   useEffect(() => {
+    let subscriber: any;
+
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -33,12 +38,31 @@ export default function ViewMapModal() {
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setUserLocation(loc.coords);
+      // Get initial location
+      const initial = await Location.getCurrentPositionAsync({});
+      setUserLocation(initial.coords);
+      setLoading(false);
+
+      // Start watching location changes (every 10s)
+      subscriber = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000, // every 10 seconds
+          distanceInterval: 10, // only update if moved 10m
+        },
+        (loc) => {
+          setUserLocation(loc.coords);
+          setUpdating(true);
+        }
+      );
     })();
+
+    return () => {
+      if (subscriber) subscriber.remove();
+    };
   }, []);
 
-  // Fetch route from OpenRouteService API
+  // ✅ 2. Fetch route when location updates
   useEffect(() => {
     const fetchRoute = async () => {
       if (!userLocation) return;
@@ -64,7 +88,6 @@ export default function ViewMapModal() {
         const data = await response.json();
         if (!data.features || data.features.length === 0) {
           Alert.alert("No route found");
-          setLoading(false);
           return;
         }
 
@@ -77,164 +100,190 @@ export default function ViewMapModal() {
         }));
 
         setRouteCoords(coords);
-        // Convert distance to kilometers
         setDistance((summary.distance / 1000).toFixed(2));
 
-        // Convert ETA to readable format
+        // ETA formatting
         const durationSec = summary.duration;
         let etaText = "";
-
         if (durationSec < 60) {
-        etaText = `${Math.round(durationSec)} seconds`;
+          etaText = `${Math.round(durationSec)} sec`;
         } else if (durationSec < 3600) {
-        const mins = Math.round(durationSec / 60);
-        etaText = `${mins} Minute${mins !== 1 ? "s" : ""}`;
+          const mins = Math.round(durationSec / 60);
+          etaText = `${mins} min${mins !== 1 ? "s" : ""}`;
         } else {
-        const hrs = Math.floor(durationSec / 3600);
-        const mins = Math.round((durationSec % 3600) / 60);
-        if (mins === 0) {
-            etaText = `${hrs} Hour${hrs !== 1 ? "s" : ""}`;
-        } else {
-            etaText = `${hrs} Hour${hrs !== 1 ? "s" : ""} ${mins} Minute${mins !== 1 ? "s" : ""}`;
-        }
+          const hrs = Math.floor(durationSec / 3600);
+          const mins = Math.round((durationSec % 3600) / 60);
+          etaText = `${hrs}h ${mins}m`;
         }
 
         setEta(etaText);
 
+        // Smoothly move map view to new position
+        mapRef.current?.animateToRegion(
+          {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          },
+          1000
+        );
       } catch (error) {
         console.error("Error fetching ORS route:", error);
-        Alert.alert("Error", "Failed to fetch route from ORS.");
       } finally {
-        setLoading(false);
+        setUpdating(false);
       }
     };
 
     fetchRoute();
   }, [userLocation]);
 
+  // ✅ 3. Initial loading indicator only once
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#1E88E5" />
         <Text style={{ color: "#1E88E5", marginTop: 10 }}>
-          Fetching route data...
+          Getting your location...
         </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.overlay}>
-      <View style={styles.card}>
-        {distance && eta && (
-        <View style={styles.infoBox}>
-            <Text style={styles.label}>Distance</Text>
-            <Text style={styles.valueBlue}>{distance} km</Text>
+    <View style={styles.container}>
+      {/* Map takes full screen */}
+      {userLocation ? (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={{
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            latitudeDelta: 0.1,
+            longitudeDelta: 0.1,
+          }}
+        >
+          {/* Draw the route */}
+          {routeCoords.length > 0 && (
+            <Polyline
+              coordinates={routeCoords}
+              strokeColor="#1E88E5"
+              strokeWidth={5}
+            />
+          )}
 
-            <Text style={styles.label}>Estimated Time</Text>
-            <Text style={styles.valueRed}>{eta}</Text>
-        </View>
-        )}
-
-        {userLocation ? (
-          <MapView
-            style={styles.map}
-            initialRegion={{
+          {/* User marker */}
+          <Marker
+            coordinate={{
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
-              latitudeDelta: 0.1,
-              longitudeDelta: 0.1,
             }}
-          >
-            {/* Draw the route */}
-            {routeCoords.length > 0 && (
-              <Polyline
-                coordinates={routeCoords}
-                strokeColor="#1E88E5"
-                strokeWidth={5}
-              />
-            )}
+            title="Your Location"
+            pinColor="green"
+          />
 
-            {/* User marker */}
-            <Marker
-              coordinate={{
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-              }}
-              title="Your Location"
-              pinColor="green"
-            />
+          {/* Destination marker */}
+          <Marker
+            coordinate={{
+              latitude: Number(lat),
+              longitude: Number(lng),
+            }}
+            title={String(locationName || "Destination")}
+          />
+        </MapView>
+      ) : (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#1E88E5" />
+          <Text style={{ color: "#1E88E5", marginTop: 10 }}>
+            Locating your position...
+          </Text>
+        </View>
+      )}
 
-            {/* Store marker */}
-            <Marker
-              coordinate={{
-                latitude: Number(lat),
-                longitude: Number(lng),
-              }}
-              title={String(locationName || "Store")}
-            />
-          </MapView>
-        ) : (
-          <Text style={styles.loading}>Fetching your location...</Text>
-        )}
+      {/* Overlay info panel */}
+      {distance && eta && (
+        <View style={styles.infoOverlay}>
+          <Text style={styles.label}>Distance</Text>
+          <Text style={styles.valueBlue}>{distance} km</Text>
+          <Text style={styles.label}>Estimated Time</Text>
+          <Text style={styles.valueRed}>{eta}</Text>
+        </View>
+      )}
 
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.closeText}>Close Map</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Close button */}
+      <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+        <Text style={styles.closeText}>Close Map</Text>
+      </TouchableOpacity>
+
+      {/* Optional subtle updating text */}
+      {updating && (
+        <Text style={styles.refreshText}>Updating your position...</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
-    backgroundColor: "rgba(247, 247, 247, 0.86)",
+    backgroundColor: "#fff",
+  },
+  map: {
+    flex: 1,
+  },
+  infoOverlay: {
+    position: "absolute",
+    top: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 10,
+    padding: 12,
+    elevation: 3,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#444",
+    marginBottom: 2,
+  },
+  valueBlue: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#43A047",
+    marginBottom: 6,
+  },
+  valueRed: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#43A047",
+  },
+  closeBtn: {
+    position: "absolute",
+    bottom: 30,
+    alignSelf: "center",
+    backgroundColor: "#4A8C2A",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    elevation: 3,
+  },
+  closeText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  refreshText: {
+    position: "absolute",
+    bottom: 80,
+    alignSelf: "center",
+    color: "#999",
+    fontStyle: "italic",
+  },
+  center: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    width: "90%",
-    elevation: 5,
-  },
-  title: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  info: { color: "#555", marginBottom: 8 },
-  map: { width: "100%", height: 400, borderRadius: 10 },
-  closeBtn: {
-    marginTop: 10,
-    backgroundColor: "#fff",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    borderColor: "#43A047",
-    borderWidth: 1,
-  },
-  closeText: { color: "#43A047", fontWeight: "bold" },
-  loading: { textAlign: "center", color: "#888", marginVertical: 10 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  infoBox: {
-  alignItems: "flex-start",
-  marginBottom: 12,
-},label: {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#444",
-  marginBottom: 2,
-},valueBlue: {
-  fontSize: 22,
-  fontWeight: "bold",
-  color: "#43A047",
-  marginBottom: 8,
-},valueRed: {
-  fontSize: 22,
-  fontWeight: "bold",
-  color: "#43A047",
-  marginBottom: 10,
-},
 });
