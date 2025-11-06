@@ -7,9 +7,8 @@ import {
   collection,
   doc,
   getDoc,
-  onSnapshot,
   serverTimestamp,
-  updateDoc,
+  updateDoc
 } from "firebase/firestore";
 import {
   getDownloadURL,
@@ -44,7 +43,7 @@ type Form = {
 export default function ProductForm() {
   const router = useRouter();
   const { id, lat, lng } = useLocalSearchParams();
-
+  const [userType, setUserType] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!id);
   const [saving, setSaving] = useState(false);
   const [imgLocalUri, setImgLocalUri] = useState<string | undefined>();
@@ -69,50 +68,39 @@ export default function ProductForm() {
     })();
   }, []);
 
-    useEffect(() => {
-      if (!id) return;
+  useEffect(() => {
+    if (!id) return;
 
-      const productRef = doc(db, "products", String(id));
-      setLoading(true);
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        const productRef = doc(db, "products", String(id));
+        const snap = await getDoc(productRef);
 
-      // keep track of whether the component is still mounted
-      let isActive = true;
-
-      console.log(" Subscribing to product:", id);
-
-      // Subscribe to Firestore snapshot
-      const unsubscribe = onSnapshot(
-        productRef,
-        (snap) => {
-          if (!isActive) return; // prevents updates after unmount
-          if (snap.exists()) {
-            const d = snap.data() as any;
-            setForm({
-              title: d.title || "",
-              description: d.description || "",
-              price: String(d.price ?? ""),
-              category: d.category || "",
-              imageUrl: d.imageUrl,
-              locationName: d.locationName || "",
-              lat: d.lat,
-              lng: d.lng,
-            });
-          }
-          setLoading(false);
-        },
-        (error) => {
-          console.error(" Firestore listener error:", error.message);
-          setLoading(false);
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setForm({
+            title: d.title || "",
+            description: d.description || "",
+            price: String(d.price ?? ""),
+            category: d.category || "",
+            imageUrl: d.imageUrl,
+            locationName: d.locationName || "",
+            lat: d.lat,
+            lng: d.lng,
+          });
+        } else {
+          console.warn("Product not found:", id);
         }
-      );
+      } catch (error) {
+        console.error("Firestore fetch error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      // cleanup on unmount
-      return () => {
-        console.log(" Cleaning up listener for:", id);
-        isActive = false;
-        unsubscribe(); // stop the listener immediately
-      };
-    }, [id]);
+    fetchProduct();
+  }, [id]);
 
   // Update location name from map
   useEffect(() => {
@@ -133,12 +121,15 @@ export default function ProductForm() {
     const loadUserRole = async () => {
       const user = auth.currentUser;
       if (!user) return;
+
       const snap = await getDoc(doc(db, "users", user.uid));
       if (snap.exists()) {
-        const type = snap.data().userType || "Store Owner";
+        const type = (snap.data().userType || "Store Owner").toLowerCase();
+        setUserType(type);
         setForm((prev) => ({ ...prev, category: type }));
       } else {
-        setForm((prev) => ({ ...prev, category: "Store Owner" }));
+        setUserType("store owner");
+        setForm((prev) => ({ ...prev, category: "store owner" }));
       }
     };
     loadUserRole();
@@ -146,17 +137,44 @@ export default function ProductForm() {
 
   // Pick image
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow access to your photos.");
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!res.canceled) setImgLocalUri(res.assets[0].uri);
+    Alert.alert(
+      "Select Option",
+      "Would you like to capture a new photo or choose from gallery?",
+      [
+        {
+          text: "Camera",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Permission needed", "Allow access to your camera.");
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled) setImgLocalUri(result.assets[0].uri);
+          },
+        },
+        {
+          text: "Gallery",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Permission needed", "Allow access to your photos.");
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled) setImgLocalUri(result.assets[0].uri);
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   // Upload image if present
@@ -187,8 +205,22 @@ export default function ProductForm() {
     try {
       const user = auth.currentUser;
       if (!user) return Alert.alert("Not signed in");
-      if (!form.title || !form.price) {
-        return Alert.alert("Missing fields", "Title and price are required.");
+      if (!form.title.trim()) {
+        return Alert.alert("Missing fields", "Please fill in the post title.");
+      }
+
+      if (!imgLocalUri && !form.imageUrl) {
+        return Alert.alert("Image Required", "Please upload a post image before posting.");
+      }
+
+      // Only enforce price and location for non-consumers
+      if (userType !== "consumer") {
+        if (!form.price.trim()) {
+          return Alert.alert("Missing fields", "Please enter a price for your product.");
+        }
+        if (!form.lat || !form.lng) {
+          return Alert.alert("Location Required", "Please pick a location on the map before posting.");
+        }
       }
 
       setSaving(true);
@@ -221,11 +253,11 @@ export default function ProductForm() {
         const docRef = await addDoc(collection(db, "products"), {
           userId: user.uid,
           userName,
-          userType, // for filtering
+          userType,
           title: form.title,
           description: form.description,
           price: Number(form.price),
-          category: form.category, // optional display
+          category: userType, // optional display
           locationName: form.locationName || "",
           lat: form.lat || deviceLocation?.lat || null,
           lng: form.lng || deviceLocation?.lng || null,
@@ -238,7 +270,7 @@ export default function ProductForm() {
         if (imageUrl) await updateDoc(docRef, { imageUrl });
       }
 
-      Alert.alert("Success", `Product ${id ? "updated" : "created"}!`);
+      Alert.alert("Success", `Post ${id ? "updated" : "uploaded"}!`);
       router.back();
     } catch (e: any) {
       console.error("Firestore error:", e);
@@ -255,6 +287,12 @@ export default function ProductForm() {
       </View>
     );
   }
+
+  const isDisabled =
+    saving ||
+    !form.title.trim() ||
+    (!imgLocalUri && !form.imageUrl) ||
+    (userType !== "consumer" && (!form.price.trim() || !form.lat || !form.lng));
 
   // ---------- Layout (updated) ----------
   return (
@@ -281,12 +319,12 @@ export default function ProductForm() {
           )}
         </TouchableOpacity>
 
-        {/* Card */}
         <View style={styles.card}>
+          {/* Common fields for everyone */}
           <Text style={styles.label}>Post Title</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter product name"
+            placeholder="Enter post title"
             value={form.title}
             onChangeText={(v) => setForm({ ...form, title: v })}
           />
@@ -294,48 +332,60 @@ export default function ProductForm() {
           <Text style={styles.label}>Description</Text>
           <TextInput
             style={[styles.input, { height: 100, textAlignVertical: "top" }]}
-            placeholder="Describe your product"
+            placeholder="Describe your post"
             value={form.description}
             onChangeText={(v) => setForm({ ...form, description: v })}
             multiline
           />
 
-          <Text style={styles.label}>Price (₱)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0.00"
-            keyboardType="numeric"
-            value={form.price}
-            onChangeText={(v) => setForm({ ...form, price: v })}
-          />
+          {/* Only show these if NOT a consumer */}
+          {userType !== "consumer" && (
+            <>
+              <Text style={styles.label}>Price (₱)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0.00"
+                keyboardType="numeric"
+                value={form.price}
+                onChangeText={(v) => setForm({ ...form, price: v })}
+              />
 
-          <View style={styles.autoCategoryBox}>
-            <Text style={styles.label}>Category</Text>
-            <Text style={styles.categoryValue}>{form.category || "Loading..."}</Text>
-          </View>
+              <View style={styles.autoCategoryBox}>
+                <Text style={styles.label}>Category</Text>
+                <Text style={styles.categoryValue}>{form.category || "Loading..."}</Text>
+              </View>
 
-          <TouchableOpacity
-            style={[styles.input, { justifyContent: "center" }]}
-            onPress={() =>
-              router.push({
-                pathname: "/modals/location-picker",
-                params: { preserve: "true" },
-              })
-            }
-          >
-            <Text style={{ color: form.locationName ? "#000" : "#999" }}>
-              {form.locationName || "Pick location on map"}
-            </Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.input, { justifyContent: "center" }]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/modals/location-picker",
+                    params: { preserve: "true" },
+                  })
+                }
+              >
+                <Text style={{ color: form.locationName ? "#000" : "#999" }}>
+                  {form.locationName || "Pick location on map"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* Save */}
         <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+          style={[
+            styles.saveBtn,
+            (saving || isDisabled) && { opacity: 0.6, backgroundColor: "#a5d6a7" },
+          ]}
           onPress={save}
-          disabled={saving}
+          disabled={isDisabled}
         >
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save Product</Text>}
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.saveText}>Save Product</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </View>

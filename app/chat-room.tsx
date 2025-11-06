@@ -43,6 +43,7 @@ export default function ChatRoom() {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
   // peer info
   const [userName, setUserName] = useState("User");
@@ -239,18 +240,23 @@ export default function ChatRoom() {
 
   /** Send text message **/
   const sendMessage = async () => {
-    if (!text.trim() || !me) return;
+    if (!text.trim() || !me || sending) return; // prevent double send
+    setSending(true); // lock
+
     try {
+      const trimmedText = text.trim();
+
       await addDoc(collection(db, "chats", String(chatId), "messages"), {
         senderId: me.uid,
-        text: text.trim(),
+        text: trimmedText,
         createdAt: serverTimestamp(),
       });
+
       const chatRef = doc(db, "chats", String(chatId));
       await setDoc(
         chatRef,
         {
-          lastMessage: text.trim(),
+          lastMessage: trimmedText,
           lastSenderId: me.uid,
           lastMessageStatus: "delivered",
           lastMessageAt: serverTimestamp(),
@@ -258,9 +264,13 @@ export default function ChatRoom() {
         },
         { merge: true }
       );
+
       setText("");
     } catch (err) {
       console.error("Send message error:", err);
+      Alert.alert("Error", "Failed to send message.");
+    } finally {
+      setSending(false); // unlock
     }
   };
 
@@ -344,7 +354,15 @@ export default function ChatRoom() {
         async () => {
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log("Upload done. downloadURL:", downloadURL);
+
+            const tempMsg = {
+              id: `temp-${Date.now()}`,
+              senderId: me.uid,
+              imageUrl: downloadURL,
+              text: "",
+              createdAt: new Date(), // show right away
+            };
+            setMessages((prev) => [...prev, tempMsg]);
 
             // write message
             await addDoc(collection(db, "chats", String(chatId), "messages"), {

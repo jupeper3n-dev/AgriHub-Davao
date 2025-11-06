@@ -304,15 +304,29 @@ export default function SavedPosts() {
           </View>
         )}
 
-        {/* Product Info */}
-        <Text style={styles.infoText}>
-          <Text style={styles.label}>Product:</Text> {item.title} {" | "}
-          <Text style={styles.label}>Category:</Text> {item.category} {" | "}
-          <Text style={styles.label}>Price:</Text>{" "}
-          <Text style={{ color: "#43A047", fontWeight: "bold" }}>
-            ₱ {item.price}
-          </Text>
-        </Text>
+        {/* Product Info Section */}
+        <View style={styles.infoContainer}>
+          {/* First row — Title and Category side by side */}
+          <View style={styles.rowBetween}>
+            <Text style={styles.infoText}>
+              <Text style={styles.label}>Post Title:</Text> {item.title || "Untitled"}
+            </Text>
+
+            <Text style={[styles.infoText, { textAlign: "right" }]}>
+              <Text style={styles.label}>Category:</Text> {item.category || "Uncategorized"}
+            </Text>
+          </View>
+
+          {/* Second row — only show price if NOT consumer */}
+          {(!item.userType || item.userType?.toLowerCase() !== "consumer") && (
+            <View style={{ marginTop: 4 }}>
+              <Text style={styles.infoText}>
+                <Text style={styles.label}>Price:</Text>{" "}
+                <Text style={styles.priceText}>₱ {item.price ?? "N/A"}</Text>
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Description */}
         {item.description ? (
@@ -585,5 +599,17 @@ chatText: {
   backgroundColor: "rgba(0,0,0,0.5)",
   borderRadius: 20,
   padding: 6,
+},infoContainer: {
+  marginBottom: 6,
+  marginTop: 4,
+},
+
+rowBetween: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+},priceText: {
+  color: "#43A047",
+  fontWeight: "bold",
 },
 }); 

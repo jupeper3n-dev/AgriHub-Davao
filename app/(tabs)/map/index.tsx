@@ -47,8 +47,8 @@ const davaoPolygon = davaoRegionCoords.map(([lng, lat]) => ({
 
 // Marker colors by category
 const markerColors: Record<string, string> = {
-  farmer: "#FB8C00", // Orange
-  "store owner": "#43A047", // Green
+  farmer: "#FB8C00",
+  "store owner": "#43A047",
 };
 
 export default function MapScreen() {
@@ -59,6 +59,7 @@ export default function MapScreen() {
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [legendFilter, setLegendFilter] = useState<"All" | "Farmer" | "Store Owner">("All");
 
   // Get current user location
   useEffect(() => {
@@ -110,7 +111,11 @@ export default function MapScreen() {
           visible = visible.filter(
             (p) => (p.userType || "").toLowerCase() === "store owner"
           );
-        }
+        } else if (role === "store owner") {
+            visible = visible.filter(
+              (p) => (p.userType || "").toLowerCase() === "farmer"
+            );
+          }
 
         setProducts(visible);
       });
@@ -190,38 +195,18 @@ export default function MapScreen() {
             })}
       </MapView>
 
-      {/* Filter Buttons */}
-      {userRole === "store owner" && (
-        <View style={styles.filterBar}>
-          {["All", "Farmer", "Store Owner"].map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              style={[
-                styles.filterButton,
-                filter === cat && styles.filterButtonActive,
-              ]}
-              onPress={() => setFilter(cat)}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  filter === cat && styles.filterTextActive,
-                ]}
-              >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Legend */}
+      {/* Legends — adjust dynamically based on user role */}
       {userRole === "store owner" && (
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.colorDot, { backgroundColor: "#FB8C00" }]} />
             <Text>Farmer</Text>
           </View>
+        </View>
+      )}
+
+      {(userRole === "farmer" || userRole === "consumer") && (
+        <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.colorDot, { backgroundColor: "#43A047" }]} />
             <Text>Store Owner</Text>
@@ -433,6 +418,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.9)",
     padding: 8,
     borderRadius: 10,
+    marginBottom: 50,
   },
   legendItem: {
     flexDirection: "row",
@@ -561,5 +547,20 @@ btnText: {
 },fullscreenImage: {
   width: "100%",
   height: "100%",
+},topLegend: {
+  position: "absolute",
+  top: 20,
+  left: 10,
+  backgroundColor: "rgba(255,255,255,0.9)",
+  paddingVertical: 8,
+  paddingHorizontal: 10,
+  borderRadius: 10,
+  elevation: 3,
+  zIndex: 999,
+},
+legendText: {
+  color: "#333",
+  fontSize: 13,
+  fontWeight: "500",
 },
 });

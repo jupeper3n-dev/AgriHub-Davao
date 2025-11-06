@@ -9,15 +9,14 @@ import { doc, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Modal,
+  Alert, Image, Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
@@ -34,6 +33,8 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [crops, setCrops] = useState<string[]>([]);
+  const [cropInput, setCropInput] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Password validation
@@ -69,7 +70,8 @@ export default function RegisterScreen() {
         email,
         phone,
         address,
-        userType,
+        userType: userType.toLowerCase(),
+        crops: userType.toLowerCase() === "farmer" ? crops : [],
         createdAt: new Date().toISOString(),
         verified: user.emailVerified,
       });
@@ -100,6 +102,17 @@ export default function RegisterScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
+
+      <View style={styles.headerBar}>
+      <View style={styles.headerContent}>
+        <Image
+          source={require("../assets/images/agrihub-davao-logo.png")}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.headerTitle}>AgriHub Davao</Text>
+      </View>
+    </View>
       <View style={styles.container}>
         <Text style={styles.title}>Create Account</Text>
 
@@ -194,19 +207,60 @@ export default function RegisterScreen() {
           onChangeText={setAddress}
         />
 
-        {/* User Type */}
         <View style={styles.pickerContainer}>
           <Text style={styles.label}>Register as:</Text>
           <Picker
             selectedValue={userType}
-            onValueChange={(value) => setUserType(value)}
+            onValueChange={(value) => {
+              if (value) setUserType(value.toLowerCase());
+            }}
             style={styles.picker}
           >
-            <Picker.Item label="Consumer" value="Consumer" />
-            <Picker.Item label="Farmer" value="Farmer" />
-            <Picker.Item label="Store Owner" value="Store Owner" />
+            <Picker.Item label="Consumer" value="consumer" />
+            <Picker.Item label="Farmer" value="farmer" />
+            <Picker.Item label="Store Owner" value="store owner" />
           </Picker>
         </View>
+
+          {userType.toLowerCase() === "farmer" && (
+          <View style={{ width: "100%", marginBottom: 10 }}>
+            <Text style={styles.label}>Crops You Plant</Text>
+
+            <View style={styles.tagInputContainer}>
+              <TextInput
+                style={styles.tagInput}
+                placeholder="Type a crop and press Add"
+                value={cropInput}
+                onChangeText={setCropInput}
+              />
+              <TouchableOpacity
+                style={styles.addTagButton}
+                onPress={() => {
+                  if (cropInput.trim() && !crops.includes(cropInput.trim())) {
+                    setCrops([...crops, cropInput.trim()]);
+                    setCropInput("");
+                  }
+                }}
+              >
+                <Text style={styles.addTagText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Display current tags */}
+            <View style={styles.tagsContainer}>
+              {crops.map((crop, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{crop}</Text>
+                  <TouchableOpacity
+                    onPress={() => setCrops(crops.filter((c) => c !== crop))}
+                  >
+                    <Ionicons name="close-circle" size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Terms and Conditions */}
         <View style={styles.checkboxContainer}>
@@ -335,7 +389,7 @@ By using AgriHubDavao, you acknowledge that you have read, understood, and agree
 const styles = StyleSheet.create({
   scrollContainer: { flexGrow: 1, justifyContent: "center", backgroundColor: "#fff" },
   container: { flex: 1, padding: 20, alignItems: "flex-start", paddingTop: 60 },
-  title: { fontSize: 26, fontWeight: "bold", marginBottom: 20, color: "#222" },
+  title: { fontSize: 26, fontWeight: "bold", marginBottom: 20, color: "#222", marginTop: 30, },
   input: {
     width: "100%", borderWidth: 1, borderColor: "#ccc", borderRadius: 8,
     padding: 10, marginBottom: 10, fontSize: 16, color: "#000",
@@ -385,4 +439,78 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A8C2A", paddingVertical: 10, borderRadius: 6, alignItems: "center",
   },
   closeButtonText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
+  tagInputContainer: {
+  flexDirection: "row",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "#ccc",
+  borderRadius: 8,
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+},
+tagInput: {
+  flex: 1,
+  fontSize: 15,
+  color: "#000",
+  paddingVertical: 8,
+},
+addTagButton: {
+  backgroundColor: "#4A8C2A",
+  borderRadius: 6,
+  paddingVertical: 6,
+  paddingHorizontal: 12,
+  marginLeft: 8,
+},
+addTagText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 14,
+},
+tagsContainer: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  marginTop: 8,
+},
+tag: {
+  flexDirection: "row",
+  alignItems: "center",
+  backgroundColor: "#4A8C2A",
+  borderRadius: 16,
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  marginRight: 6,
+  marginBottom: 6,
+},
+tagText: {
+  color: "#fff",
+  fontSize: 13,
+  marginRight: 4,
+},headerBar: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  backgroundColor: "#4A8C2A",
+  paddingVertical: 14,
+  paddingHorizontal: 16,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  elevation: 4,
+  zIndex: 100,
+},
+headerContent: {
+  flexDirection: "row",
+  alignItems: "center",
+},
+headerLogo: {
+  width: 36,
+  height: 36,
+  marginRight: 10,
+},
+headerTitle: {
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: "bold",
+},
 });

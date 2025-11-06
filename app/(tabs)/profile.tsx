@@ -44,7 +44,6 @@ export default function ProfileScreen() {
   >(null);
   const [declineReason, setDeclineReason] = useState<string | null>(null);
   const [showReason, setShowReason] = useState(false);
-
   const router = useRouter();
   const { refresh } = useLocalSearchParams();
 
@@ -191,11 +190,7 @@ if (userData?.verified === true || verification === "approved") {
   return (
     <FlatList
       style={styles.container}
-      data={
-        userData?.userType?.toLowerCase() === "consumer"
-          ? [] // no products shown for consumers
-          : myProducts
-      }
+      data={myProducts}
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ paddingBottom: 40 }}
       ListHeaderComponent={
@@ -249,62 +244,47 @@ if (userData?.verified === true || verification === "approved") {
               </>
             )}
 
-            <View
-              style={{
-                flexDirection:
-                  userData?.userType?.toLowerCase() === "consumer"
-                    ? "column"
-                    : "row",
-                alignItems:
-                  userData?.userType?.toLowerCase() === "consumer"
-                    ? "center"
-                    : "flex-start",
-                gap: 10,
-                marginTop: 10,
-              }}
-            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  marginTop: 10,
+                }}
+              >
               <TouchableOpacity
                 style={[
                   styles.editButton,
-                  userData?.userType?.toLowerCase() === "consumer" && {
-                    width: "60%",
-                    alignItems: "center",
-                  },{
-                    backgroundColor: "#fff",    
-                    borderWidth: 2,                
+                  {
+                    backgroundColor: "#fff",
+                    borderWidth: 2,
                     borderColor: "#4A8C2A",
+                    alignItems: "center",
                   },
                 ]}
                 onPress={() => router.push("/modals/edit-profile")}
               >
-                <Text style={[styles.editButtonText, { color: "#43A047"}]}>Edit Profile</Text>
+                <Text style={[styles.editButtonText, { color: "#43A047" }]}>
+                  Edit Profile
+                </Text>
               </TouchableOpacity>
-
-              {userData?.userType?.toLowerCase() !== "consumer" && (
-                <TouchableOpacity
-                  style={[styles.editButton, { backgroundColor: "#43A047" }]}
-                  onPress={() => {
-                    if (statusLabel !== "Verified") {
-                      Alert.alert(
-                        "Account Not Verified",
-                        "You must verify your account before adding products.",
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Verify Now",
-                            onPress: () =>
-                              router.push("/modals/upload-verification"),
-                          },
-                        ]
-                      );
-                    } else {
-                      router.push("/modals/product-form");
-                    }
-                  }}
-                >
-                  <Text style={styles.editButtonText}>Add Post</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[
+                  styles.editButton,
+                  {
+                    backgroundColor:
+                      statusLabel === "Verified" ? "#43A047" : "#a5d6a7", // dimmed green
+                    opacity: statusLabel === "Verified" ? 1 : 0.6,
+                  },
+                ]}
+                disabled={statusLabel !== "Verified"} // disable press
+                onPress={() => router.push("/modals/product-form")}
+              >
+                <Text style={styles.editButtonText}>
+                  {statusLabel === "Verified" ? "Add Post" : "Verify to Add Post"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -326,8 +306,6 @@ if (userData?.verified === true || verification === "approved") {
             </TouchableOpacity>
           </View>
 
-          {/* Hide My Products for Consumers */}
-          {userData?.userType?.toLowerCase() !== "consumer" && (
             <>
               <Text style={styles.sectionTitle}>My Products</Text>
               {myProducts.length === 0 && (
@@ -342,11 +320,9 @@ if (userData?.verified === true || verification === "approved") {
                 </Text>
               )}
             </>
-          )}
         </>
       }
       renderItem={({ item }) =>
-        userData?.userType?.toLowerCase() === "consumer" ? null : (
           <View style={styles.card}>
             {item.imageUrl ? (
               <Image source={{ uri: item.imageUrl }} style={styles.cardImg} />
@@ -375,7 +351,6 @@ if (userData?.verified === true || verification === "approved") {
               </View>
             </View>
           </View>
-        )
       }
     />
   );

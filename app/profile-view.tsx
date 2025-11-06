@@ -102,6 +102,8 @@ export default function ProfileView() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isBanned = userInfo?.banned === true;
+  const isVerified = userInfo?.verified === true;
+  const [cropsModalVisible, setCropsModalVisible] = useState(false);
   const isSuspended =
     userInfo?.suspendedUntil
       ? ((userInfo.suspendedUntil.toDate?.() || new Date(userInfo.suspendedUntil)) > new Date())
@@ -484,6 +486,7 @@ export default function ProfileView() {
             userName: item.userName || "Unknown User",
             imageUrl: item.imageUrl || null,
             category: item.category || "Uncategorized",
+            userType: item.userType || "",
             price: item.price || 0,
             description: item.description || "",
             createdAt: new Date(),
@@ -538,14 +541,26 @@ export default function ProfileView() {
           </View>
         )}
 
-        {/* Info */}
-        <View style={styles.infoRow}>
-          <Text style={styles.infoText}>
-            <Text style={styles.label}>Product:</Text> {item.title} {" | "}
-            <Text style={styles.label}>Category:</Text> {item.category} {" | "}
-            <Text style={styles.label}>Price:</Text>{" "}
-            <Text style={{ color: "#43A047", fontWeight: "bold" }}>₱ {item.price}</Text>
-          </Text>
+        {/* Info Section */}
+        <View style={[styles.infoRow, { flexWrap: "wrap", justifyContent: "space-between" }]}>
+          {/* Post Title and Category in a row */}
+          <View style={{ flexDirection: "row", justifyContent: "space-between", flex: 1 }}>
+            <Text style={[styles.infoText, { flexShrink: 1 }]}>
+              <Text style={styles.label}>Post Title:</Text> {item.title || "Untitled"}
+            </Text>
+
+            <Text style={[styles.infoText, { flexShrink: 1 }]}>
+              <Text style={styles.label}>Category:</Text> {item.category || "Uncategorized"}
+            </Text>
+          </View>
+
+          {/* Show price only if not a consumer post */}
+          {item.userType?.toLowerCase() !== "consumer" && (
+            <Text style={[styles.infoText, { marginTop: 4 }]}>
+              <Text style={styles.label}>Price:</Text>{" "}
+              <Text style={{ color: "#43A047", fontWeight: "bold" }}>₱ {item.price ?? "N/A"}</Text>
+            </Text>
+          )}
         </View>
 
         {item.description ? (
@@ -648,7 +663,14 @@ export default function ProfileView() {
             </View>
           )}
 
-          <Text style={styles.name}>{userInfo.fullName || "Unnamed User"}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={styles.name}>{userInfo.fullName || "Unnamed User"}</Text>
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color={isVerified ? "#43A047" : "#E53935"} // green = verified, red = not verified
+            />
+          </View>
           <Text style={styles.email}>{userInfo.email}</Text>
 
             <Text style={styles.metaLine}>
@@ -743,12 +765,23 @@ export default function ProfileView() {
             </View>
             )}
 
-          <Text style={styles.role}>
-            {userInfo.userType
-              ? userInfo.userType.charAt(0).toUpperCase() +
-                userInfo.userType.slice(1)
-              : "Unknown Role"}
-          </Text>
+            <View style={{ alignItems: "center", marginTop: 6 }}>
+              <Text style={styles.role}>
+                {userInfo.userType
+                  ? userInfo.userType.charAt(0).toUpperCase() + userInfo.userType.slice(1)
+                  : "Unknown Role"}
+              </Text>
+
+              {userInfo?.userType?.toLowerCase() === "farmer" && (
+                <TouchableOpacity
+                  style={styles.cropsBtnBelow}
+                  onPress={() => setCropsModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.cropsBtnTextBelow}>See produced crops</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
           {currentUser?.uid !== userId && (
             <View style={styles.actionRow}>
@@ -792,9 +825,9 @@ export default function ProfileView() {
                     >
                       <Text style={styles.reportText}>
                         {isBanned
-                          ? "Banned"
+                          ? "User Banned"
                           : isSuspended
-                          ? "Suspended"
+                          ? "User Suspended"
                           : hasReported
                           ? "Reported"
                           : "Report"}
@@ -833,6 +866,7 @@ export default function ProfileView() {
                   }
                 />
               )}
+
             </SafeAreaView>
           </Modal>
         ) : (
@@ -923,6 +957,38 @@ export default function ProfileView() {
             </TouchableOpacity>
           </>
         )}
+      </View>
+    </Modal>
+    {/* Crops Modal */}
+    <Modal visible={cropsModalVisible} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.cropsModalBox}>
+          <Text style={styles.modalTitle}>Produced Crops</Text>
+
+          <View style={styles.cropsScrollWrapper}>
+            {Array.isArray(userInfo?.crops) && userInfo.crops.length > 0 ? (
+              <View style={styles.cropsListModal}>
+                {userInfo.crops.map((c: string, idx: number) => (
+                  <View key={idx} style={styles.cropPill}>
+                    <Text style={styles.cropPillText} numberOfLines={1}>
+                      {c}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.noCropsText}>No crops listed</Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={styles.cropsCloseBtn}
+            onPress={() => setCropsModalVisible(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cropsCloseText}>Close</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
     </SafeAreaView>
@@ -1167,5 +1233,97 @@ closeButton: {
   backgroundColor: "rgba(0,0,0,0.4)",
   borderRadius: 20,
   padding: 5,
+},roleRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 6,
+  gap: 8,
+}, cropsBtn: {
+  backgroundColor: "#E8F5E9",
+  borderWidth: 1,
+  borderColor: "#4A8C2A",
+  borderRadius: 16,
+  paddingVertical: 4,
+  paddingHorizontal: 10,
+}, cropsBtnText: {
+  color: "#2E7D32",
+  fontWeight: "600",
+  fontSize: 13,
+}, cropsListModal: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "center",
+  alignItems: "flex-start",
+  gap: 8,
+  marginTop: 5,
+  marginBottom: 10,
+},cropTag: {
+  backgroundColor: "#C8E6C9",
+  color: "#2E7D32",
+  fontSize: 13,
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 10,
+}, noCropsText: {
+  fontSize: 13,
+  color: "#888",
+  textAlign: "center",
+  marginTop: 10,
+}, cropsBtnBelow: {
+  backgroundColor: "#E8F5E9",
+  borderWidth: 1,
+  borderColor: "#4A8C2A",
+  borderRadius: 20,
+  paddingVertical: 5,
+  paddingHorizontal: 14,
+  marginTop: 6,
+},cropsBtnTextBelow: {
+  color: "#2E7D32",
+  fontWeight: "600",
+  fontSize: 13,
+},cropsModalBox: {
+  backgroundColor: "#fff",
+  padding: 20,
+  borderRadius: 12,
+  minHeight: "35%",
+  maxHeight: "70%",
+  width: "85%",
+  alignItems: "center",
+  elevation: 4,
+  height: "35%",
+},cropsScrollWrapper: {
+  width: "100%",
+  marginTop: 10,
+  justifyContent: "flex-start",
+  alignItems: "center",
+},cropsCloseBtn: {
+  position: "absolute",
+  bottom: 20,
+  alignSelf: "center",
+  backgroundColor: "#4A8C2A",
+  paddingHorizontal: 30,
+  paddingVertical: 10,
+  borderRadius: 20,
+  minWidth: 100,
+  alignItems: "center",
+}, cropsCloseText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 15,
+},cropPill: {
+  backgroundColor: "#C8E6C9",
+  borderRadius: 14,
+  paddingHorizontal: 10,
+  height: 28,                 // fixed height for all chips
+  justifyContent: "center",   // vertical centering
+  alignItems: "center",
+  minWidth: 48,               // optional: prevents super tiny pills
+},cropPillText: {
+  color: "#2E7D32",
+  fontSize: 12,
+  lineHeight: 16,
+  includeFontPadding: false,  // Android: removes extra top/bottom font padding
 },
+
 });

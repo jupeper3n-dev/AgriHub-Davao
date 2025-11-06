@@ -24,14 +24,27 @@ export default function EditProfile() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  type FormData = {
+  fullName: string;
+  email: string;
+  address: string;
+  password: string;
+  photoURL: string;
+  crops: string[];
+  };
+
+  const [form, setForm] = useState<FormData>({
     fullName: "",
     email: "",
     address: "",
     password: "",
     photoURL: "",
+    crops: [],
   });
+
+  const [newCrop, setNewCrop] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [userType, setUserType] = useState<string>("");
   const [imgLocalUri, setImgLocalUri] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -57,7 +70,9 @@ export default function EditProfile() {
             address: d.address || "",
             password: "",
             photoURL: d.photoURL || "",
+            crops: d.crops || [],
           });
+          setUserType(d.userType || "");
         }
       } catch (err) {
         console.error(err);
@@ -138,6 +153,7 @@ export default function EditProfile() {
         email: form.email,
         address: form.address,
         photoURL: newPhotoURL,
+        crops: form.crops,
       });
 
       // Update password if it's been changed
@@ -188,8 +204,18 @@ export default function EditProfile() {
   }
 
   return (
+    <View style={styles.wrapper}>
+    {/* 🟩 Fixed Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+        </View>
+      </View>
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
-      <Text style={styles.title}>Edit Profile</Text>
+
 
       <TouchableOpacity onPress={pickImage} style={styles.imageBox}>
         {imgLocalUri || form.photoURL ? (
@@ -217,6 +243,56 @@ export default function EditProfile() {
         value={form.address}
         onChangeText={(v) => setForm({ ...form, address: v })}
       />
+
+      {userType.toLowerCase() === "farmer" && (
+        <>
+          <Text style={styles.label}>Crops (for Farmers)</Text>
+
+          {/* Add Crop Row */}
+          <View style={styles.cropRow}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="Add a crop..."
+              value={newCrop}
+              onChangeText={setNewCrop}
+            />
+            <TouchableOpacity
+              style={styles.addCropBtn}
+              onPress={() => {
+                if (!newCrop.trim()) return;
+                setForm((prev) => ({
+                  ...prev,
+                  crops: [...(prev.crops || []), newCrop.trim()],
+                }));
+                setNewCrop("");
+              }}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Existing Crops List */}
+          {form.crops.length > 0 && (
+            <View style={styles.cropList}>
+              {form.crops.map((crop, index) => (
+                <View key={index} style={styles.cropPill}>
+                  <Text style={styles.cropText}>{crop}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        crops: prev.crops.filter((_, i) => i !== index),
+                      }))
+                    }
+                  >
+                    <Ionicons name="close-circle" size={18} color="red" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      )}
 
       <View style={styles.passwordContainer}>
         <TextInput
@@ -285,6 +361,7 @@ export default function EditProfile() {
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
@@ -354,6 +431,71 @@ const styles = StyleSheet.create({
   marginBottom: 20,
   paddingLeft: 10,
   paddingRight: 10,
+},
+headerTitle: {
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: "bold",
+},
+cropRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 10,
+},
+addCropBtn: {
+  backgroundColor: "#4A8C2A",
+  padding: 10,
+  borderRadius: 10,
+  marginLeft: 8,
+}, cropList: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 6,
+  marginBottom: 20,
+  marginTop: 10,
+},cropPill: {
+  flexDirection: "row",
+  alignItems: "center",
+  backgroundColor: "#E8F5E9",
+  borderRadius: 20,
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+},cropText: {
+  color: "#2E7D32",
+  marginRight: 6,
+},label: {
+  fontWeight: "bold",
+  color: "#333",
+  marginBottom: 6,
+  fontSize: 16,
+},wrapper: {
+  flex: 1,
+  backgroundColor: "#fff",
+},
+header: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  backgroundColor: "#4A8C2A",
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  paddingHorizontal: 16,
+  paddingVertical: 14,
+  elevation: 5,
+  zIndex: 100, // ensures it stays above ScrollView
+},
+headerLeft: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,
+},
+scrollContainer: {
+  flex: 1,
+  marginTop: 65, // push content below the fixed header height
+  paddingHorizontal: 20,
+  backgroundColor: "#fff",
 },
 
 });

@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { db } from "../../firebaseConfig";
 
 import {
+  ActivityIndicator,
   Image,
   Modal,
   ScrollView,
@@ -19,43 +20,65 @@ export default function ProductDetailsModal() {
   const router = useRouter();
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [imageFromDb, setImageFromDb] = useState<string | null>(null);
+  const [postOwnerId, setPostOwnerId] = useState<string | null>(null);
+  const [userType, setUserType] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const id = params.id || params.productId;
-    if (!id) {
-      console.warn(" No product ID found in params");
-      return;
-    }
+useEffect(() => {
+  const id = params.id || params.productId;
+  if (!id) {
+    console.warn("No product ID found in params");
+    return;
+  }
 
-    (async () => {
-      try {
-        const ref = doc(db, "products", id as string);
-        const snap = await getDoc(ref);
+  (async () => {
+    try {
+      const ref = doc(db, "products", id as string);
+      const snap = await getDoc(ref);
 
-        if (snap.exists()) {
-          const data = snap.data();
+      if (snap.exists()) {
+        const data = snap.data();
+        setPostOwnerId(data.userId || null);
 
-          // Use the same URL the dashboard card shows
-          const validUrl =
-            typeof data.imageUrl === "string"
-              ? data.imageUrl
-              : Array.isArray(data.imageUrl)
-              ? data.imageUrl[0]
-              : data.imageUrl?.uri || null;
+        // STEP 1: Determine user type from product itself
+        let type = (data.userType || "").toLowerCase();
 
-          if (validUrl) {
-            setImageFromDb(validUrl);
-            console.log(" Loaded image from Firestore:", validUrl);
+        // STEP 2: If not in product, look up user's profile
+        if (!type && data.userId) {
+          const userRef = doc(db, "users", data.userId);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            type = (userData.userType || "consumer").toLowerCase();
           } else {
-            console.warn(" No imageUrl in Firestore for", id);
+            type = "consumer";
           }
         }
-      } catch (err) {
-        console.error(" Error fetching image from Firestore:", err);
-      }
-    })();
-  }, []);
 
+        setUserType(type);
+
+        // STEP 3: Handle image as before
+        const validUrl =
+          typeof data.imageUrl === "string"
+            ? data.imageUrl
+            : Array.isArray(data.imageUrl)
+            ? data.imageUrl[0]
+            : data.imageUrl?.uri || null;
+
+        if (validUrl) {
+          setImageFromDb(validUrl);
+          console.log("Loaded image from Firestore:", validUrl);
+        } else {
+          console.warn("No imageUrl in Firestore for", id);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching image from Firestore:", err);
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, []);
 
   const {
     title,
@@ -72,6 +95,15 @@ export default function ProductDetailsModal() {
 
   // Use same image as Dashboard (no decoding/re-encoding)
   const finalImage = imageFromDb || null;
+
+if (loading) {
+  return (
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.7)" }}>
+      <ActivityIndicator size="large" color="#4A8C2A" />
+    </View>
+  );
+}
+
 
   return (
     <View style={styles.overlay}>
@@ -119,16 +151,17 @@ export default function ProductDetailsModal() {
               <Text style={styles.value}>{category || "N/A"}</Text>
             </View>
 
-            {/* Price */}
-            <View style={styles.infoRow}>
-              <Ionicons name="cash-outline" size={18} color="#4A8C2A" />
-              <Text style={styles.label}>Price:</Text>
-              <Text
-                style={[styles.value, { color: "#1E88E5", fontWeight: "bold" }]}
-              >
-                ₱ {price || "N/A"}
-              </Text>
-            </View>
+            {userType !== "consumer" && (
+              <View style={styles.infoRow}>
+                <Ionicons name="cash-outline" size={18} color="#4A8C2A" />
+                <Text style={styles.label}>Price:</Text>
+                <Text
+                  style={[styles.value, { color: "#1E88E5", fontWeight: "bold" }]}
+                >
+                  ₱ {price || "N/A"}
+                </Text>
+              </View>
+            )}
 
             {/* Posted By */}
             <View style={styles.infoRow}>
@@ -143,35 +176,38 @@ export default function ProductDetailsModal() {
               {description || "No description provided."}
             </Text>
 
-            {/* Location */}
-            <Text style={styles.sectionTitle}>Store Location</Text>
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color="#4A8C2A" />
-              <Text style={styles.label}>Location:</Text>
-              <Text style={styles.value}>
-                {locationName
-                  ? `${locationName}`
-                  : lat && lng
-                  ? `Location selected (${lat}, ${lng})`
-                  : "Not provided"}
-              </Text>
-            </View>
+            {userType !== "consumer" && (
+              <>
+                <Text style={styles.sectionTitle}>Store Location</Text>
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={18} color="#4A8C2A" />
+                  <Text style={styles.label}>Location:</Text>
+                  <Text style={styles.value}>
+                    {locationName
+                      ? `${locationName}`
+                      : lat && lng
+                      ? `Location selected (${lat}, ${lng})`
+                      : "Not provided"}
+                  </Text>
+                </View>
 
-            {lat && lng && (
-              <TouchableOpacity
-                style={styles.mapBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: "/modals/view-map",
-                    params: { lat, lng, locationName },
-                  })
-                }
-              >
-                <Ionicons name="map-outline" size={18} color="#fff" />
-                <Text style={styles.mapBtnText}>See Location</Text>
-              </TouchableOpacity>
+                {lat && lng && (
+                  <TouchableOpacity
+                    style={styles.mapBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/modals/view-map",
+                        params: { lat, lng, locationName },
+                      })
+                    }
+                  >
+                    <Ionicons name="map-outline" size={18} color="#fff" />
+                    <Text style={styles.mapBtnText}>See Location</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
-          </View>
+            </View>
         </ScrollView>
       </View>
 
@@ -198,7 +234,7 @@ export default function ProductDetailsModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "#b6b6b679",
     justifyContent: "center",
     alignItems: "center",
   },

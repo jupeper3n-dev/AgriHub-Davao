@@ -79,48 +79,57 @@ export default function SearchUsers() {
     const keyword = search.trim();
     let resultsList: any[] = [];
 
-    // Attempt uppercase version
+    const lower = keyword.toLowerCase();
+    const upper = keyword.charAt(0).toUpperCase() + keyword.slice(1);
+
     const q1 = query(
       collection(db, "users"),
       orderBy("fullName"),
-      where("fullName", ">=", keyword.charAt(0).toUpperCase() + keyword.slice(1)),
-      where("fullName", "<=", keyword.charAt(0).toUpperCase() + keyword.slice(1) + "\uf8ff")
+      where("fullName", ">=", upper),
+      where("fullName", "<=", upper + "\uf8ff")
     );
-    const snap1 = await getDocs(q1);
-    snap1.forEach((d) => resultsList.push({ id: d.id, ...d.data() }));
 
-    // If no result, try lowercase fallback
-    if (resultsList.length === 0) {
-      const lower = keyword.toLowerCase();
-      const q2 = query(
-        collection(db, "users"),
-        orderBy("fullName"),
-        where("fullName", ">=", lower.charAt(0).toLowerCase() + lower.slice(1)),
-        where("fullName", "<=", lower.charAt(0).toLowerCase() + lower.slice(1) + "\uf8ff")
-      );
-      const snap2 = await getDocs(q2);
-      snap2.forEach((d) => resultsList.push({ id: d.id, ...d.data() }));
-    }
+    const q2 = query(
+      collection(db, "users"),
+      orderBy("fullName"),
+      where("fullName", ">=", lower),
+      where("fullName", "<=", lower + "\uf8ff")
+    );
+
+    // Run both queries at once
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+    // Merge unique results
+    snap1.forEach((d) => resultsList.push({ id: d.id, ...d.data() }));
+    snap2.forEach((d) => {
+      if (!resultsList.some((r) => r.id === d.id)) resultsList.push({ id: d.id, ...d.data() });
+    });
 
     const currentUid = auth.currentUser?.uid;
     const role = userRole?.toLowerCase();
     let filtered: any[] = [];
 
     if (role === "store owner") {
+      // Store owner sees all types except themselves
       filtered = resultsList.filter(
         (u) =>
-          (filterType === "All" ||
-            (filterType === "Farmers" && u.userType?.toLowerCase() === "farmer") ||
-            (filterType === "Consumers" && u.userType?.toLowerCase() === "consumer")) &&
-          u.id !== currentUid
+          ["store owner", "consumer", "farmer"].includes(
+            (u.userType || "").toLowerCase()
+          ) && u.id !== currentUid
       );
     } else if (role === "farmer") {
+      // Farmer sees farmers and store owners
       filtered = resultsList.filter(
-        (u) => u.userType?.toLowerCase() === "store owner" && u.id !== currentUid
+        (u) =>
+          ["farmer", "store owner"].includes((u.userType || "").toLowerCase()) &&
+          u.id !== currentUid
       );
     } else if (role === "consumer") {
+      // Consumer sees consumers and store owners
       filtered = resultsList.filter(
-        (u) => u.userType?.toLowerCase() === "farmer" && u.id !== currentUid
+        (u) =>
+          ["consumer", "store owner"].includes((u.userType || "").toLowerCase()) &&
+          u.id !== currentUid
       );
     }
 
@@ -132,33 +141,53 @@ export default function SearchUsers() {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return;
 
-    // Fetch all products ordered by title
-    const q = query(collection(db, "products"), orderBy("title"));
-    const snap = await getDocs(q);
+    const lower = keyword.toLowerCase();
+    const upper = keyword.charAt(0).toUpperCase() + keyword.slice(1);
 
-    // Convert all to lowercase and filter manually
-    const allProducts: any[] = [];
-    snap.forEach((d) => allProducts.push({ id: d.id, ...d.data() }));
-
-    const matched = allProducts.filter((p) =>
-      (p.title || "").toLowerCase().includes(keyword)
+    const q1 = query(
+      collection(db, "products"),
+      orderBy("title"),
+      where("title", ">=", upper),
+      where("title", "<=", upper + "\uf8ff")
     );
+    const q2 = query(
+      collection(db, "products"),
+      orderBy("title"),
+      where("title", ">=", lower),
+      where("title", "<=", lower + "\uf8ff")
+    );
+
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+    const allProducts: any[] = [];
+    snap1.forEach((d) => allProducts.push({ id: d.id, ...d.data() }));
+    snap2.forEach((d) => {
+      if (!allProducts.some((r) => r.id === d.id)) allProducts.push({ id: d.id, ...d.data() });
+    });
+
 
     const currentUid = auth.currentUser?.uid;
     const role = userRole?.toLowerCase();
     let filtered: any[] = [];
 
     if (role === "store owner") {
-      filtered = matched.filter(
-        (p) => p.category?.toLowerCase() === "farmer" && p.userId !== currentUid
+      filtered = allProducts.filter(
+        (p) =>
+          ["store owner", "consumer", "farmer"].includes(
+            (p.category || "").toLowerCase()
+          ) && p.userId !== currentUid
       );
     } else if (role === "farmer") {
-      filtered = matched.filter(
-        (p) => p.category?.toLowerCase() === "store owner" && p.userId !== currentUid
+      filtered = allProducts.filter(
+        (p) =>
+          ["farmer", "store owner"].includes((p.category || "").toLowerCase()) &&
+          p.userId !== currentUid
       );
     } else if (role === "consumer") {
-      filtered = matched.filter(
-        (p) => p.category?.toLowerCase() === "farmer" && p.userId !== currentUid
+      filtered = allProducts.filter(
+        (p) =>
+          ["consumer", "store owner"].includes((p.category || "").toLowerCase()) &&
+          p.userId !== currentUid
       );
     }
 

@@ -25,8 +25,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
-  Modal,
+  Image, Linking, Modal,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -34,7 +33,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth, db } from "../../firebaseConfig";
@@ -128,12 +127,36 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Home");
   const [unreadChats, setUnreadChats] = useState(0);
+  const [verification, setVerification] = useState<"pending" | "approved" | "rejected" | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  
+  const [customAlert, setCustomAlert] = useState<{
+    visible: boolean;
+    type: "pending" | "rejected" | "notVerified" | null;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: null,
+    title: "",
+    message: "",
+  });
+
+  const showCustomAlert = (
+    type: "pending" | "rejected" | "notVerified",
+    title: string,
+    message: string
+  ) => {
+    setCustomAlert({ visible: true, type, title, message });
+  };
+
+  const closeCustomAlert = () =>
+    setCustomAlert({ ...customAlert, visible: false });
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -193,20 +216,29 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (!userRole) return;
+
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const allItems: any[] = [];
       snap.forEach((doc) => allItems.push({ id: doc.id, ...doc.data() }));
 
-      let visiblePosts = allItems;
-      if (userRole?.toLowerCase() === "farmer" || userRole?.toLowerCase() === "consumer") {
-        visiblePosts = allItems.filter(
-          (p) => (p.category || "").toLowerCase() === "store owner"
-        );
-      }
-
       const currentUid = auth.currentUser?.uid;
-      visiblePosts = visiblePosts.filter((p) => p.userId !== currentUid);
+      const role = (userRole || "").toLowerCase().trim();
+
+      // Define allowed visibility per role
+      const visibilityMap: Record<string, Set<string>> = {
+        "store owner": new Set(["store owner", "consumer", "farmer"]),
+        "farmer": new Set(["farmer", "store owner"]),
+        "consumer": new Set(["consumer", "store owner"]),
+      };
+
+      const allowed = visibilityMap[role] ?? new Set();
+
+      // Filter posts: allowed category + not user's own
+      const visiblePosts = allItems.filter((p) => {
+        const type = (p.userType || "").toLowerCase().trim();
+        return allowed.has(type) && p.userId !== currentUid;
+      });
 
       setProducts(visiblePosts);
       setFiltered(visiblePosts);
@@ -225,6 +257,22 @@ export default function DashboardScreen() {
       const savedIds: string[] = [];
       snap.forEach((d) => savedIds.push(d.data().postId));
       setSavedPosts(savedIds);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const unsub = onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setVerification(data.status);
+      } else {
+        setVerification(null);
+      }
     });
 
     return () => unsub();
@@ -324,6 +372,7 @@ export default function DashboardScreen() {
           userName: item.userName || "Unknown User",
           imageUrl: item.imageUrl || null,
           category: item.category || "Uncategorized",
+          userType: item.userType || "",
           price: item.price || 0,
           description: item.description || "",
           latitude: item.latitude ?? null,
@@ -438,14 +487,29 @@ export default function DashboardScreen() {
           )}
 
           {/* Product Info */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoText}>
-              <Text style={styles.label}>Product:</Text> {item.title} {" | "}
-              <Text style={styles.label}>Category:</Text> {item.category} {" | "}
-              <Text style={styles.label}>Price:</Text>{" "}
-              <Text style={{ color: "#43A047", fontWeight: "bold" }}>₱ {item.price}</Text>
+          <View style={[styles.infoRow, { flexWrap: "wrap", justifyContent: "space-between" }]}>
+            {/* Post Title */}
+            <Text style={[styles.infoText, { flexShrink: 1 }]}>
+              <Text style={styles.label}>Post Title:</Text> {item.title || "Untitled"}
+            </Text>
+
+            {/* Category */}
+            <Text style={[styles.infoText, { flexShrink: 1 }]}>
+              <Text style={styles.label}>Category:</Text> {item.category || "N/A"}
             </Text>
           </View>
+
+          {/* Show price only if not a consumer post */}
+          {item.userType?.toLowerCase() !== "consumer" && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoText}>
+                <Text style={styles.label}>Price:</Text>{" "}
+                <Text style={{ color: "#43A047", fontWeight: "bold" }}>
+                  ₱ {item.price ?? "N/A"}
+                </Text>
+              </Text>
+            </View>
+          )}
 
           {/* Description */}
           {item.description ? (
@@ -518,9 +582,6 @@ export default function DashboardScreen() {
       );
     };
 
-// ...rest of your DashboardScreen component (unchanged)...
-
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -546,9 +607,9 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.navbar}>
-        {["Home", "Messages", "Notifications"].map((tab) => {
-          const isActive = activeTab === tab;
+      <View style={styles.whiteNav}>
+        {["Messages", "Notifications"].map((tab, index) => {
+          const isActive = activeTab === tab && activeTab !== "Home"; // Only active if not "Home"
           const showBadge =
             (tab === "Messages" && unreadChats > 0) ||
             (tab === "Notifications" && unreadNotifications > 0);
@@ -556,33 +617,42 @@ export default function DashboardScreen() {
             tab === "Messages" ? unreadChats : unreadNotifications;
 
           return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.navItem, isActive && styles.navItemActive]}
-              onPress={() => {
-                if (tab === "Messages") {
-                  router.push("../chats");
-                } else if (tab === "Notifications") {
-                  router.push("/notifications");
-                } else {
-                  setActiveTab(tab);
-                }
-              }}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={[styles.navText, isActive && styles.navTextActive]}>
-                  {tab}
-                </Text>
+            <React.Fragment key={tab}>
+              <TouchableOpacity
+                style={[styles.navItemWhite, isActive && styles.navItemWhiteActive]}
+                onPress={() => {
+                  if (tab === "Messages") {
+                    router.push("../chats");
+                    setActiveTab("Messages");
+                  } else if (tab === "Notifications") {
+                    router.push("/notifications");
+                    setActiveTab("Notifications");
+                  }
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text
+                    style={[
+                      styles.navTextWhite,
+                      isActive && styles.navTextWhiteActive,
+                    ]}
+                  >
+                    {tab}
+                  </Text>
 
-                {showBadge && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {badgeCount > 99 ? "99+" : badgeCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
+                  {showBadge && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {badgeCount > 99 ? "99+" : badgeCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Divider between tabs */}
+              {index === 0 && <View style={styles.verticalDivider} />}
+            </React.Fragment>
           );
         })}
       </View>
@@ -598,17 +668,52 @@ export default function DashboardScreen() {
         />
       </View>
 
-      {(userRole === "Store Owner" || userRole === "Farmer") && (
-      <View style={[styles.addButtonContainer, { bottom: 20 + insets.bottom }]}>
+      <View style={[styles.addButtonContainer, { bottom: 20 + insets.bottom, }]}>
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push("/modals/product-form")}
+          style={[
+            styles.addButton,
+            {
+              backgroundColor:
+                verification === "approved" ? "#43A047" : "#a5d6a7", // bright green vs dim green
+              opacity: verification === "approved" ? 1 : 0.7,
+            },
+          ]}
+          onPress={() => {
+          if (verification === "pending") {
+            showCustomAlert(
+              "pending",
+              "Verification In Progress",
+              "Your verification is currently under review. You’ll be able to post once it’s approved."
+            );
+            return;
+          }
+
+          if (verification === "rejected") {
+            showCustomAlert(
+              "rejected",
+              "Verification Rejected",
+              "Your verification request was rejected."
+            );
+            return;
+          }
+
+          if (verification !== "approved") {
+            showCustomAlert(
+              "notVerified",
+              "Verification Required",
+              "You must verify your account before adding a post."
+            );
+            return;
+          }
+
+            // Only allow navigation when approved
+            router.push("/modals/product-form");
+          }}
         >
           <Ionicons name="add-circle-outline" size={24} color="#fff" />
           <Text style={styles.addButtonText}>Add a Post</Text>
         </TouchableOpacity>
       </View>
-      )}
 
       <Modal visible={imageModalVisible} transparent animationType="fade">
         <View style={styles.modalBackground}>
@@ -629,6 +734,64 @@ export default function DashboardScreen() {
           )}
         </View>
       </Modal>
+      <Modal transparent visible={customAlert.visible} animationType="fade">
+      <View style={styles.alertOverlay}>
+        <View
+          style={[
+            styles.alertBox,
+            customAlert.type === "pending" && { borderColor: "#FFC107", borderWidth: 2 },
+            customAlert.type === "rejected" && { borderColor: "#E53935", borderWidth: 2 },
+            customAlert.type === "notVerified" && { borderColor: "#757575", borderWidth: 2 },
+          ]}
+        >
+          {customAlert.type === "pending" && (
+            <Ionicons name="time-outline" size={60} color="#FFC107" style={{ marginBottom: 10 }} />
+          )}
+          {customAlert.type === "rejected" && (
+            <Ionicons name="close-circle-outline" size={60} color="#E53935" style={{ marginBottom: 10 }} />
+          )}
+          {customAlert.type === "notVerified" && (
+            <Ionicons name="alert-circle-outline" size={60} color="#757575" style={{ marginBottom: 10 }} />
+          )}
+
+          <Text
+            style={[
+              styles.alertTitle,
+              customAlert.type === "pending" && { color: "#FFC107" },
+              customAlert.type === "rejected" && { color: "#E53935" },
+              customAlert.type === "notVerified" && { color: "#757575" },
+            ]}
+          >
+            {customAlert.title}
+          </Text>
+          <View style={{ alignItems: "center" }}>
+            <Text style={styles.alertMessage}>
+              {customAlert.message}
+            </Text>
+
+            {/* Separate row for contact support */}
+            <Text
+              style={styles.mailLink}
+              onPress={() => Linking.openURL("mailto:support@agrihub.com?subject=Verification Assistance - AgriHub")}
+            >
+              Contact Support
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.alertButton,
+              customAlert.type === "pending" && { backgroundColor: "#FFC107" },
+              customAlert.type === "rejected" && { backgroundColor: "#E53935" },
+              customAlert.type === "notVerified" && { backgroundColor: "#757575" },
+            ]}
+            onPress={closeCustomAlert}
+          >
+            <Text style={styles.alertButtonText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
     </SafeAreaView>
   );
 }
@@ -667,7 +830,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
-    marginTop: 20,
+    marginTop: 5,
     marginBottom: 14,
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -686,7 +849,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  infoRow: { marginBottom: 6 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
   infoText: { fontSize: 16, color: "#000" },
   label: { fontWeight: "bold", color: "#000" },
   descriptionBox: { marginTop: 8, marginBottom: 8 },
@@ -758,7 +927,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 2,
     shadowOffset: { width: 1, height: 1 },
-    elevation: 3, // Android support
+    elevation: 3,
   },iconButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -773,7 +942,7 @@ const styles = StyleSheet.create({
   shadowOpacity: 1,
   shadowRadius: 2,
   shadowOffset: { width: 1, height: 1 },
-  elevation: 3, // Android shadow support
+  elevation: 3,
   },modalBackground: {
   flex: 1,
   backgroundColor: "rgba(0,0,0,0.95)",
@@ -805,5 +974,78 @@ badgeText: {
   color: "#fff",
   fontSize: 16,
   fontWeight: "bold",
+},whiteNav: {
+  flexDirection: "row",
+  justifyContent: "space-around",
+  alignItems: "center",
+  backgroundColor: "#fff",
+  paddingVertical: 6,
+  borderBottomWidth: 1,
+  borderBottomColor: "#ddd",
+  elevation: 2,
+}, navItemWhite: {
+  paddingVertical: 8,
+  paddingHorizontal: 10,
+  borderBottomWidth: 2,
+  borderBottomColor: "transparent",
+}, navItemWhiteActive: {
+  borderBottomColor: "#4A8C2A",
+}, navTextWhite: {
+  fontSize: 16,
+  fontWeight: "500",
+  color: "#555",
+}, navTextWhiteActive: {
+  color: "#4A8C2A",
+  fontWeight: "bold",
+},verticalDivider: {
+  width: 1.2,
+  height: 20,
+  backgroundColor: "#000",
+  alignSelf: "center",
+  marginHorizontal: 8,
+  opacity: 1,
+},alertOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.5)",
+  justifyContent: "center",
+  alignItems: "center",
 },
+alertBox: {
+  backgroundColor: "#fff",
+  padding: 25,
+  borderRadius: 14,
+  alignItems: "center",
+  width: "80%",
+  shadowColor: "#000",
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+  height: "40%",
+  elevation: 5,
+}, alertTitle: {
+  fontSize: 20,
+  fontWeight: "bold",
+  marginBottom: 6,
+  textAlign: "center",
+}, alertMessage: {
+  fontSize: 15,
+  color: "#444",
+  textAlign: "center",
+  marginBottom: 16,
+  lineHeight: 20,
+}, alertButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 30,
+  borderRadius: 8,
+  marginTop: 30,
+}, alertButtonText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "600",
+},mailLink: {
+  color: "#1E88E5",
+  textDecorationLine: "underline",
+  fontWeight: "600",
+  fontSize: 18,
+},
+
 });

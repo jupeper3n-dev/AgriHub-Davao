@@ -26,7 +26,7 @@ export default function ViewMapModal() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false); // new: shows silent updates
 
-  // ✅ 1. Watch user location every 10 seconds
+  // 1. Watch user location every 10 seconds
   useEffect(() => {
     let subscriber: any;
 
@@ -62,7 +62,7 @@ export default function ViewMapModal() {
     };
   }, []);
 
-  // ✅ 2. Fetch route when location updates
+  // 2. Fetch route when location updates
   useEffect(() => {
     const fetchRoute = async () => {
       if (!userLocation) return;
@@ -138,7 +138,7 @@ export default function ViewMapModal() {
     fetchRoute();
   }, [userLocation]);
 
-  // ✅ 3. Initial loading indicator only once
+  // 3. Initial loading indicator only once
   if (loading) {
     return (
       <View style={styles.center}>
