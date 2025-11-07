@@ -116,12 +116,25 @@ export default function ProductForm() {
     }
   }, [lat, lng]);
 
-  // Set user’s role automatically
   useEffect(() => {
-    const loadUserRole = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        console.log(" Auth restored for ProductForm:", user.uid);
+        loadUserRole(); // safely reloads userType
+      } else {
+        console.log(" No user logged in");
+        setUserType(null);
+      }
+    });
 
+    return () => unsub();
+  }, []);
+
+  const loadUserRole = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
       const snap = await getDoc(doc(db, "users", user.uid));
       if (snap.exists()) {
         const type = (snap.data().userType || "Store Owner").toLowerCase();
@@ -131,9 +144,10 @@ export default function ProductForm() {
         setUserType("store owner");
         setForm((prev) => ({ ...prev, category: "store owner" }));
       }
-    };
-    loadUserRole();
-  }, []);
+    } catch (err) {
+      console.error("Failed to load user role:", err);
+    }
+  };
 
   // Pick image
   const pickImage = async () => {
@@ -190,6 +204,7 @@ export default function ProductForm() {
       await uploadBytes(storageRef, blob);
 
       const downloadURL = await getDownloadURL(storageRef);
+      await new Promise((res) => setTimeout(res, 300));
       console.log("Final image URL:", downloadURL);
 
       return downloadURL;
@@ -271,7 +286,10 @@ export default function ProductForm() {
       }
 
       Alert.alert("Success", `Post ${id ? "updated" : "uploaded"}!`);
-      router.back();
+      router.push({
+        pathname: "/profile",
+        params: { refresh: Date.now().toString() },
+      });
     } catch (e: any) {
       console.error("Firestore error:", e);
       Alert.alert("Error", e.message);
@@ -384,7 +402,7 @@ export default function ProductForm() {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveText}>Save Product</Text>
+            <Text style={styles.saveText}>Upload Post</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

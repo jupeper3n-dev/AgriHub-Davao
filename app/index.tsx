@@ -2,7 +2,8 @@ import { Redirect } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { auth, db } from "../firebaseConfig";
+import { db } from "../firebaseConfig";
+import { waitForAuth } from "../lib/waitForAuth";
 
 export default function Index() {
   const [role, setRole] = useState<string | null>(null);
@@ -10,14 +11,15 @@ export default function Index() {
 
   useEffect(() => {
     const fetchUserRole = async () => {
-      const user = auth.currentUser;
-      if (!user) {
-        setRole("guest");
-        setLoading(false);
-        return;
-      }
-
       try {
+        // ✅ Wait until Firebase finishes restoring session
+        const user = await waitForAuth();
+        if (!user) {
+          setRole("guest");
+          setLoading(false);
+          return;
+        }
+
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
           const data = userDoc.data();

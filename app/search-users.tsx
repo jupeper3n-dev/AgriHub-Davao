@@ -32,19 +32,16 @@ export default function SearchUsers() {
   const [filterType, setFilterType] = useState<"All" | "Farmers" | "Consumers">("All");
   const router = useRouter();
 
-  // Fetch logged-in user's role
   useEffect(() => {
-    const fetchUserRole = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (userDoc.exists()) {
-        setUserRole(userDoc.data().userType || "Store Owner");
+    const unsub = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists()) setUserRole(snap.data().userType || "Store Owner");
       } else {
-        setUserRole("Store Owner");
+        setUserRole(null);
       }
-    };
-    fetchUserRole();
+    });
+    return () => unsub();
   }, []);
 
   // Auto-search when typing (debounced)

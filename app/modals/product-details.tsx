@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { db } from "../../firebaseConfig";
 
@@ -24,61 +24,66 @@ export default function ProductDetailsModal() {
   const [userType, setUserType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const id = params.id || params.productId;
-  if (!id) {
-    console.warn("No product ID found in params");
-    return;
-  }
-
-  (async () => {
-    try {
-      const ref = doc(db, "products", id as string);
-      const snap = await getDoc(ref);
-
-      if (snap.exists()) {
-        const data = snap.data();
-        setPostOwnerId(data.userId || null);
-
-        // STEP 1: Determine user type from product itself
-        let type = (data.userType || "").toLowerCase();
-
-        // STEP 2: If not in product, look up user's profile
-        if (!type && data.userId) {
-          const userRef = doc(db, "users", data.userId);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            type = (userData.userType || "consumer").toLowerCase();
-          } else {
-            type = "consumer";
-          }
-        }
-
-        setUserType(type);
-
-        // STEP 3: Handle image as before
-        const validUrl =
-          typeof data.imageUrl === "string"
-            ? data.imageUrl
-            : Array.isArray(data.imageUrl)
-            ? data.imageUrl[0]
-            : data.imageUrl?.uri || null;
-
-        if (validUrl) {
-          setImageFromDb(validUrl);
-          console.log("Loaded image from Firestore:", validUrl);
-        } else {
-          console.warn("No imageUrl in Firestore for", id);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching image from Firestore:", err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const id = params.id || params.productId;
+    if (!id) {
+      console.warn("No product ID found in params");
+      return;
     }
-  })();
-}, []);
+
+    const ref = doc(db, "products", id as string);
+
+    const unsub = onSnapshot(
+      ref,
+      async (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setPostOwnerId(data.userId || null);
+
+          // STEP 1: Determine user type from product itself
+          let type = (data.userType || "").toLowerCase();
+
+          // STEP 2: If not in product, look up user's profile
+          if (!type && data.userId) {
+            const userRef = doc(db, "users", data.userId);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+              const userData = userSnap.data();
+              type = (userData.userType || "consumer").toLowerCase();
+            } else {
+              type = "consumer";
+            }
+          }
+
+          setUserType(type);
+
+          // STEP 3: Handle image
+          const validUrl =
+            typeof data.imageUrl === "string"
+              ? data.imageUrl
+              : Array.isArray(data.imageUrl)
+              ? data.imageUrl[0]
+              : data.imageUrl?.uri || null;
+
+          if (validUrl) {
+            setImageFromDb(validUrl);
+          } else {
+            setImageFromDb(null);
+          }
+        } else {
+          console.warn("Product deleted or not found:", id);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Real-time listener error:", error);
+        setLoading(false);
+      }
+    );
+
+    // cleanup when component unmounts
+    return () => unsub();
+  }, []);
 
   const {
     title,

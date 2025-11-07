@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -104,6 +105,7 @@ export default function ProfileView() {
   const isBanned = userInfo?.banned === true;
   const isVerified = userInfo?.verified === true;
   const [cropsModalVisible, setCropsModalVisible] = useState(false);
+  const isFocused = useIsFocused();
   const isSuspended =
     userInfo?.suspendedUntil
       ? ((userInfo.suspendedUntil.toDate?.() || new Date(userInfo.suspendedUntil)) > new Date())
@@ -192,7 +194,12 @@ export default function ProfileView() {
     }
   };
 
-  const currentUser = auth.currentUser;
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => setCurrentUser(u));
+    return () => unsub();
+  }, []);
+
   // Rating system
   const [myRating, setMyRating] = useState<number | null>(null);
   const [avgRating, setAvgRating] = useState<number>(0);
@@ -234,14 +241,16 @@ export default function ProfileView() {
     fetchUser();
   }, [userId]);
 
-  // Load user posts (kept with full actions)
   useEffect(() => {
-    if (!userId) return;
+    if (!isFocused || !userId) return;
+
     const q = query(
       collection(db, "products"),
       where("userId", "==", String(userId)),
       orderBy("createdAt", "desc")
     );
+
+    console.log(" ProfileView: starting post listener");
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -255,8 +264,12 @@ export default function ProfileView() {
         setLoadingPosts(false);
       }
     );
-    return () => unsub();
-  }, [userId]);
+
+    return () => {
+      console.log(" ProfileView: cleaning post listener");
+      unsub();
+    };
+  }, [isFocused, userId]);
 
   // Check if current user has already reported this profile
   useEffect(() => {
@@ -279,37 +292,40 @@ export default function ProfileView() {
     checkReport();
   }, [userId]);
 
-  // Live follower count
   useEffect(() => {
-    if (!userId) return;
+    if (!isFocused || !userId) return;
+
+    console.log(" ProfileView: follower listener started");
     const ref = collection(db, "follows", String(userId), "followers");
     const unsub = onSnapshot(ref, (snap) => setFollowerCount(snap.size));
-    return () => unsub();
-  }, [userId]);
 
-    useEffect(() => {
-    if (!userId) return;
+    return () => {
+      console.log(" ProfileView: cleaning follower listener");
+      unsub();
+    };
+  }, [isFocused, userId]);
 
+  useEffect(() => {
+    if (!isFocused || !userId) return;
+
+    console.log(" ProfileView: rating listener started");
     const q = query(collection(db, "ratings"), where("userId", "==", userId));
     const unsub = onSnapshot(
-        q,
-        (snap) => {
+      q,
+      (snap) => {
         const ratingMap = new Map<string, { score: number; updatedAt: any }>();
-
         snap.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (typeof data.score === "number" && data.ratedBy) {
+          const data = docSnap.data();
+          if (typeof data.score === "number" && data.ratedBy) {
             const existing = ratingMap.get(data.ratedBy);
-            // keep only the latest rating per user
             if (
-                !existing ||
-                (data.updatedAt?.toMillis?.() || 0) > (existing.updatedAt?.toMillis?.() || 0)
+              !existing ||
+              (data.updatedAt?.toMillis?.() || 0) > (existing.updatedAt?.toMillis?.() || 0)
             ) {
-                ratingMap.set(data.ratedBy, { score: data.score, updatedAt: data.updatedAt });
+              ratingMap.set(data.ratedBy, { score: data.score, updatedAt: data.updatedAt });
             }
-            }
+          }
         });
-
         const allRatings = Array.from(ratingMap.values()).map((r) => r.score);
         const total = allRatings.reduce((sum, n) => sum + n, 0);
         const count = allRatings.length;
@@ -318,22 +334,29 @@ export default function ProfileView() {
         setRatingsCount(count);
         setAvgRating(count > 0 ? total / count : 0);
         setMyRating(myScore);
-        },
-        (err) => console.error("Rating listener error:", err)
+      },
+      (err) => console.error("Rating listener error:", err)
     );
 
-    return () => unsub();
-    }, [userId, currentUser]);
+    return () => {
+      console.log(" ProfileView: cleaning rating listener");
+      unsub();
+    };
+  }, [isFocused, userId, currentUser]);
 
-  // Follow state (live)
   useEffect(() => {
-    if (!currentUser || !userId) return;
+    if (!isFocused || !currentUser || !userId) return;
+
+    console.log(" ProfileView: following state listener started");
     const ref = doc(db, "follows", currentUser.uid, "following", String(userId));
     const unsub = onSnapshot(ref, (snap) => setIsFollowing(snap.exists()));
-    return () => unsub();
-  }, [currentUser, userId]);
 
-  // Toggle Follow
+    return () => {
+      console.log(" ProfileView: cleaning following listener");
+      unsub();
+    };
+  }, [isFocused, currentUser, userId]);
+
   const toggleFollow = async () => {
     if (!currentUser) return Alert.alert("Login Required");
     const me = currentUser.uid;

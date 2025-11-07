@@ -1,47 +1,63 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import {
-    collection,
-    doc,
-    onSnapshot,
-    orderBy,
-    query,
-    updateDoc
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    FlatList,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
 export default function NotificationsScreen() {
   const [items, setItems] = useState<any[]>([]);
   const router = useRouter();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!isFocused || !user) return;
+
+    let isMounted = true;
+    let unsub: (() => void) | null = null;
+
+    console.log(" Notifications listener started");
 
     const q = query(
       collection(db, "notifications", user.uid, "items"),
       orderBy("createdAt", "desc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const list: any[] = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      setItems(list);
-    });
+    unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!isMounted) return;
+        const list: any[] = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+        setItems(list);
+      },
+      (error) => console.error("Notification listener error:", error)
+    );
 
-    return () => unsub();
-  }, []);
+    return () => {
+      console.log(" Cleaning up notification listener");
+      isMounted = false;
+      if (unsub) unsub();
+    };
+  }, [isFocused]);
 
   const renderItem = ({ item }: { item: any }) => {
     const actorPhoto =

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
@@ -13,7 +13,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import React, { useCallback, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -46,77 +46,78 @@ export default function ProfileScreen() {
   const [showReason, setShowReason] = useState(false);
   const router = useRouter();
   const { refresh } = useLocalSearchParams();
+  
+  const isFocused = useIsFocused();
 
-  useFocusEffect(
-    useCallback(() => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      let unsubscribers: Array<() => void> = [];
-      let isActive = true;
-
-      // Helper to safely subscribe
-      const subscribeSafely = (callback: () => () => void) => {
-        if (!isActive) return;
-        const unsub = callback();
-        unsubscribers.push(unsub);
-      };
-
-      try {
-        // User data listener
-        subscribeSafely(() =>
-          onSnapshot(doc(db, "users", user.uid), (snap) => {
-            if (!isActive) return;
-            if (snap.exists()) setUserData(snap.data());
-            setLoading(false);
-          })
-        );
-
-        // Verification listener
-        subscribeSafely(() =>
-          onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
-            if (!isActive) return;
-            if (snap.exists()) {
-              const data = snap.data();
-              setVerification(data.status);
-              setDeclineReason(data.declineReason || null);
-            } else if (userData?.verified) {
-              setVerification("approved");
-              setDeclineReason(null);
-            } else {
-              setVerification(null);
-              setDeclineReason(null);
-            }
-          })
-        );
-
-        // Products listener
-        subscribeSafely(() => {
-          const q = query(
-            collection(db, "products"),
-            where("userId", "==", user.uid),
-            orderBy("createdAt", "desc")
-          );
-          return onSnapshot(q, (snap) => {
-            if (!isActive) return;
-            const rows: Product[] = [];
-            snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as any) }));
-            setMyProducts(rows);
-          });
-        });
-      } catch (e) {
-        console.error("Firestore subscription error:", e);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setLoading(true);
+        // this retriggers your main effect cleanly
+      } else {
+        setUserData(null);
+        setMyProducts([]);
+        setVerification(null);
       }
+    });
+    return () => unsub();
+  }, []);
 
-      // Cleanup when screen unfocuses
-      return () => {
-        console.log("Cleaning up Profile listeners...");
-        isActive = false;
-        unsubscribers.forEach((unsub) => unsub());
-        unsubscribers = [];
-      };
-    }, [refresh])
-  );
+  useEffect(() => {
+    if (!isFocused) {
+      console.log(" Profile not focused — skipping listeners");
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user) return;
+
+    let unsubscribers: Array<() => void> = [];
+    let timeoutId: any;
+
+    const attachListeners = () => {
+      console.log(" Attaching Profile listeners...");
+      const userRef = doc(db, "users", user.uid);
+      const unsub1 = onSnapshot(userRef, (snap) => {
+        if (snap.exists()) {
+          setUserData(snap.data());
+          setLoading(false);
+        }
+      });
+
+      const verifyRef = doc(db, "user_verifications", user.uid);
+      const unsub2 = onSnapshot(verifyRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setVerification(data.status);
+          setDeclineReason(data.declineReason || null);
+        }
+      });
+
+      const q = query(
+        collection(db, "products"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+      const unsub3 = onSnapshot(q, (snap) => {
+        const list: Product[] = [];
+        snap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
+        setMyProducts(list);
+        setLoading(false);
+      });
+
+      unsubscribers = [unsub1, unsub2, unsub3];
+    };
+
+    // Delay listener setup slightly to ensure old listeners are gone
+    timeoutId = setTimeout(attachListeners, 400);
+
+    return () => {
+      console.log(" Cleaning up Profile listeners...");
+      clearTimeout(timeoutId);
+      unsubscribers.forEach((u) => u());
+      unsubscribers = [];
+    };
+  }, [isFocused]);
 
   const handleLogout = async () => {
     try {
@@ -124,23 +125,24 @@ export default function ProfileScreen() {
 
       if (user) {
         const userRef = doc(db, "users", user.uid);
-
-        // Update Firestore *before* signing out
-        await updateDoc(userRef, {
-          isOnline: false,
-          lastSeen: serverTimestamp(),
-        });
-
-        console.log("User set offline in Firestore before logout");
+        // Add a short timeout — avoids hanging forever on bad connections
+        await Promise.race([
+          updateDoc(userRef, {
+            isOnline: false,
+            lastSeen: serverTimestamp(),
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout updating user status")), 3000)
+          ),
+        ]);
       }
 
-      // Now safe to log out
       await signOut(auth);
-
       console.log("Signed out successfully");
       router.replace("/login");
     } catch (err) {
       console.error("Logout error:", err);
+      Alert.alert("Logout Failed", "Please try again.");
     }
   };
 
@@ -279,7 +281,12 @@ if (userData?.verified === true || verification === "approved") {
                   },
                 ]}
                 disabled={statusLabel !== "Verified"} // disable press
-                onPress={() => router.push("/modals/product-form")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/modals/product-form",
+                    params: { from: "profile" },
+                  })
+                }
               >
                 <Text style={styles.editButtonText}>
                   {statusLabel === "Verified" ? "Add Post" : "Verify to Add Post"}
@@ -307,7 +314,7 @@ if (userData?.verified === true || verification === "approved") {
           </View>
 
             <>
-              <Text style={styles.sectionTitle}>My Products</Text>
+              <Text style={styles.sectionTitle}>My Posts</Text>
               {myProducts.length === 0 && (
                 <Text
                   style={{
@@ -339,7 +346,7 @@ if (userData?.verified === true || verification === "approved") {
                   onPress={() =>
                     router.push({
                       pathname: "/modals/product-form",
-                      params: { id: item.id },
+                      params: { id: item.id, from: "profile" },
                     })
                   }
                 >

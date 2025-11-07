@@ -54,84 +54,91 @@ export default function Chats() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Listen to all chats of the current user
   useEffect(() => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
-    if (!user) return;
-    const q = query(
-      collection(db, "chats"),
-      where("members", "array-contains", user.uid)
-    );
 
-    // Keep track of all chat user snapshot unsubscribers
+    let isMounted = true;
+    let unsub: (() => void) | null = null;
     const userListeners: (() => void)[] = [];
 
-    const unsub = onSnapshot(
-      q,
-      async (snap) => {
-        const list: any[] = [];
+    const setupListener = () => {
+      const q = query(
+        collection(db, "chats"),
+        where("members", "array-contains", currentUser.uid)
+      );
 
-        for (const docSnap of snap.docs) {
-          const data = docSnap.data();
-          const otherId = data.members.find((m: string) => m !== user.uid);
-          if (!otherId) continue;
+      unsub = onSnapshot(
+        q,
+        async (snap) => {
+          if (!isMounted) return;
+          const list: any[] = [];
 
-          const userRef = doc(db, "users", otherId);
+          // Clear old listeners each time snapshot fires
+          userListeners.forEach((fn) => fn());
+          userListeners.length = 0;
 
-          // Add user listener and store its unsubscribe function
-          const userUnsub = onSnapshot(userRef, (userSnap) => {
-            if (userSnap.exists()) {
-              const otherData = userSnap.data();
-              const updatedChat = {
-                id: docSnap.id,
-                ...data,
-                otherUser: otherData,
-              };
+          for (const docSnap of snap.docs) {
+            const data = docSnap.data();
+            const otherId = data.members.find((m: string) => m !== currentUser.uid);
+            if (!otherId) continue;
 
-              setChats((prev) => {
-                const existingIndex = prev.findIndex((c) => c.id === docSnap.id);
-                let newList;
-                if (existingIndex >= 0) {
-                  newList = [...prev];
-                  newList[existingIndex] = updatedChat;
-                } else {
-                  newList = [...prev, updatedChat];
-                }
+            const userRef = doc(db, "users", otherId);
+            const userUnsub = onSnapshot(userRef, (userSnap) => {
+              if (!isMounted) return;
+              if (userSnap.exists()) {
+                const otherData = userSnap.data();
+                const updatedChat = {
+                  id: docSnap.id,
+                  ...data,
+                  otherUser: otherData,
+                };
 
-                // Sort chats by latest message timestamp
-                return newList.sort((a, b) => {
-                  const timeA =
-                    a.updatedAt?.toMillis?.() ||
-                    a.lastMessageAt?.toMillis?.() ||
-                    0;
-                  const timeB =
-                    b.updatedAt?.toMillis?.() ||
-                    b.lastMessageAt?.toMillis?.() ||
-                    0;
-                  return timeB - timeA;
+                setChats((prev) => {
+                  const existingIndex = prev.findIndex((c) => c.id === docSnap.id);
+                  let newList;
+                  if (existingIndex >= 0) {
+                    newList = [...prev];
+                    newList[existingIndex] = updatedChat;
+                  } else {
+                    newList = [...prev, updatedChat];
+                  }
+                  return newList.sort((a, b) => {
+                    const timeA =
+                      a.updatedAt?.toMillis?.() ||
+                      a.lastMessageAt?.toMillis?.() ||
+                      0;
+                    const timeB =
+                      b.updatedAt?.toMillis?.() ||
+                      b.lastMessageAt?.toMillis?.() ||
+                      0;
+                    return timeB - timeA;
+                  });
                 });
-              });
-            }
-          });
+              }
+            });
 
-          userListeners.push(userUnsub);
+            userListeners.push(userUnsub);
+          }
+
+          setLoading(false);
+        },
+        (error) => {
+          console.error(" Error fetching chats:", error);
+          setLoading(false);
         }
+      );
+    };
 
-        setLoading(false);
-      },
-      (error) => {
-        console.error(" Error fetching chats:", error);
-        setLoading(false);
-      }
-    );
+    const delay = setTimeout(setupListener, 250);
 
-    // Cleanup all listeners when component unmounts
     return () => {
-      unsub();
+      isMounted = false;
+      clearTimeout(delay);
+      if (unsub) unsub();
       userListeners.forEach((fn) => fn());
     };
-  }, [user]);
+  }, []);
 
   // Pull to refresh
   const onRefresh = async () => {

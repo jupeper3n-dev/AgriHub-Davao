@@ -145,98 +145,86 @@ export default function ChatRoom() {
   }, [uid, chatId]);
 
   /** Messages listener + mark read **/
-  useEffect(() => {
-    if (!chatId) return;
+useEffect(() => {
+  if (!chatId || !auth.currentUser) return;
 
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
+  const me = auth.currentUser;
+  let unsub: (() => void) | null = null;
+  let isMounted = true;
 
+  const timer = setTimeout(() => {
     const msgRef = collection(db, "chats", String(chatId), "messages");
     const q = query(msgRef, orderBy("createdAt", "asc"));
 
-    console.log("Setting up Firestore listener for chat:", chatId);
+    unsub = onSnapshot(
+      q,
+      async (snap) => {
+        if (!isMounted) return;
 
-    // Wrap listener in try/catch to handle duplicate subscription errors gracefully
-    let unsub: (() => void) | null = null;
+        const list: any[] = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+        setMessages(list);
+        setLoading(false);
 
-    try {
-      unsub = onSnapshot(
-        q,
-        async (snap) => {
-          const list: any[] = [];
-          snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-          setMessages(list);
-          setLoading(false);
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        });
 
-          // Smooth scroll after layout
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100); // small delay to allow rendering before scroll
-          });
-
-          // Update chat metadata only when new message arrives
-          if (snap.docs.length > 0) {
-            const lastMsg = snap.docs[snap.docs.length - 1].data();
-            const chatRef = doc(db, "chats", String(chatId));
-            try {
-              await updateDoc(chatRef, {
-                lastMessageAt: lastMsg.createdAt || serverTimestamp(),
-                lastMessage: lastMsg.text || (lastMsg.imageUrl ? "[Image]" : ""),
-                lastSenderId: lastMsg.senderId,
-              });
-            } catch (metaErr) {
-              console.warn("Skipped chat metadata update:", metaErr);
-            }
+        if (snap.docs.length > 0) {
+          const lastMsg = snap.docs[snap.docs.length - 1].data();
+          const chatRef = doc(db, "chats", String(chatId));
+          const chatSnap = await getDoc(chatRef);
+          const prev = chatSnap.data();
+          if (!prev || prev.lastMessageAt?.seconds !== lastMsg.createdAt?.seconds) {
+            await updateDoc(chatRef, {
+              lastMessageAt: lastMsg.createdAt || serverTimestamp(),
+              lastMessage: lastMsg.text || (lastMsg.imageUrl ? "[Image]" : ""),
+              lastSenderId: lastMsg.senderId,
+            });
           }
-
-          // Auto-scroll to bottom
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 300);
-
-          // Mark chat as read
-          if (me) {
-            const chatRef = doc(db, "chats", String(chatId));
-            const chatSnap = await getDoc(chatRef);
-            if (chatSnap.exists()) {
-              const data = chatSnap.data() as any;
-              if (data.lastSenderId !== me.uid && data.lastMessageStatus !== "read") {
-                await updateDoc(chatRef, { lastMessageStatus: "read" });
-              }
-            }
-          }
-        },
-        (error) => {
-          // Handle "already-exists" cleanly instead of crashing
-          console.error("Chat listener error:", {
-            code: (error as any)?.code,
-            message: (error as any)?.message,
-          });
-
-          if ((error as any)?.code === "already-exists") {
-            console.warn("Duplicate listener ignored — cleaning up...");
-            if (unsub) unsub();
-            return;
-          }
-
-          Alert.alert(
-            "Permission Error",
-            (error as any)?.code === "permission-denied"
-              ? "You don't have permission to read this chat."
-              : "Failed to load messages."
-          );
-          setLoading(false);
         }
-      );
-    } catch (err) {
-      console.error("Listener setup failed:", err);
-    }
 
-    // Proper cleanup
-    return () => {
-      console.log(" Unsubscribing chat listener:", chatId);
-      if (unsub) unsub();
-    };
-  }, [chatId]);
+        // mark read
+        try {
+          const chatRef = doc(db, "chats", String(chatId));
+          const chatSnap = await getDoc(chatRef);
+          if (chatSnap.exists()) {
+            const data = chatSnap.data() as any;
+            if (data.lastSenderId !== me.uid && data.lastMessageStatus !== "read") {
+              await updateDoc(chatRef, { lastMessageStatus: "read" });
+            }
+          }
+        } catch (readErr) {
+          console.warn("Mark read skipped:", readErr);
+        }
+      },
+      (error) => {
+        console.error(" Chat listener error:", error);
+        if ((error as any)?.code === "already-exists") {
+          console.warn("Duplicate listener ignored.");
+          if (unsub) unsub();
+        } else {
+          Alert.alert(
+            "Chat Error",
+            (error as any)?.code === "permission-denied"
+              ? "You don't have permission to access this chat."
+              : "Failed to load chat."
+          );
+        }
+        setLoading(false);
+      }
+    );
+  }, 200); // slight delay ensures prior listener cleanup
+
+  return () => {
+    console.log(" Cleaning up chat listener:", chatId);
+    isMounted = false;
+    clearTimeout(timer);
+    if (unsub) unsub();
+  };
+}, [chatId]);
 
   /** Send text message **/
   const sendMessage = async () => {

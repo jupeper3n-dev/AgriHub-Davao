@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 // @ts-ignore
 import { collection, doc, getDoc, onSnapshot, query } from "firebase/firestore";
 // @ts-ignore
@@ -63,67 +64,93 @@ export default function MapScreen() {
 
   // Get current user location
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.warn("Location permission not granted");
+          return;
+        }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setRegion({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        latitudeDelta: 0.4,
-        longitudeDelta: 0.4,
-      });
-    })();
-  }, []);
-
-  // Load active products from Firestore with role-based visibility
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const userRef = doc(db, "users", user.uid);
-
-    const loadUserAndProducts = async () => {
-      const userSnap = await getDoc(userRef);
-      const role = userSnap.exists()
-        ? (userSnap.data().userType || "store owner").toLowerCase()
-        : "store owner";
-
-      setUserRole(role); // we'll add this state next
-
-      const q = query(collection(db, "products"));
-      const unsub = onSnapshot(q, (snap) => {
-        const all: any[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          // Only include active ones
-          if (data.status && data.status.toLowerCase() !== "active") return;
-          all.push({ id: d.id, ...data });
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
         });
 
-        let visible = all;
+        if (mounted) {
+          console.log("📍 Location acquired:", loc.coords);
+          setRegion({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.4,
+            longitudeDelta: 0.4,
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to get location:", err);
+      }
+    })();
 
-        // Visibility rules
-        if (role === "farmer" || role === "consumer") {
-          visible = visible.filter(
-            (p) => (p.userType || "").toLowerCase() === "store owner"
-          );
-        } else if (role === "store owner") {
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log("👀 Setting up Firebase Auth listener...");
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        console.log("No user logged in — skipping product load");
+        return;
+      }
+
+      console.log("✅ Auth restored:", user.email);
+
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+
+        const role = userSnap.exists()
+          ? (userSnap.data().userType || "store owner").toLowerCase()
+          : "store owner";
+
+        setUserRole(role);
+        console.log("👤 Current role:", role);
+
+        // Subscribe to products
+        const q = query(collection(db, "products"));
+        const unsubProducts = onSnapshot(q, (snap) => {
+          const all: any[] = [];
+          snap.forEach((d) => {
+            const data = d.data();
+            if (data.status && data.status.toLowerCase() !== "active") return;
+            all.push({ id: d.id, ...data });
+          });
+
+          let visible = all;
+          if (role === "farmer" || role === "consumer") {
+            visible = visible.filter(
+              (p) => (p.userType || "").toLowerCase() === "store owner"
+            );
+          } else if (role === "store owner") {
             visible = visible.filter(
               (p) => (p.userType || "").toLowerCase() === "farmer"
             );
           }
 
-        setProducts(visible);
-      });
+          console.log(`📍 Visible products: ${visible.length}`);
+          setProducts(visible);
+        });
 
-      return () => unsub();
-    };
+        return () => unsubProducts();
+      } catch (err) {
+        console.error("🔥 Error loading products:", err);
+      }
+    });
 
-    loadUserAndProducts();
+    return () => unsubscribeAuth();
   }, []);
 
   // Check if coordinates are within Davao region

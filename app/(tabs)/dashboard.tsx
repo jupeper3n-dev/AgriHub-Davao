@@ -1,7 +1,5 @@
-// Replaces the Share button with a Chat button
-// Redirects to the Chat Room with the post owner's userId
-
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import {
   addDoc,
@@ -133,7 +131,13 @@ export default function DashboardScreen() {
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const onRefresh = useCallback(() => {
+  setRefreshing(true);
+  setTimeout(() => setRefreshing(false), 800);
+  }, []);
+
   
   const [customAlert, setCustomAlert] = useState<{
     visible: boolean;
@@ -159,129 +163,124 @@ export default function DashboardScreen() {
     setCustomAlert({ ...customAlert, visible: false });
 
   useEffect(() => {
+    if (!isFocused) return; // skip if screen not active
+
     const user = auth.currentUser;
     if (!user) return;
 
-    const q = query(
-      collection(db, "notifications", user.uid, "items"),
-      where("read", "==", false)
-    );
+    const unsubscribers: (() => void)[] = [];
 
-    const unsub = onSnapshot(q, (snap) => {
-      setUnreadNotifications(snap.size);
-    });
+    try {
+      console.log(" Dashboard: setting up snapshot listeners...");
 
-    return () => unsub();
-  }, []);
+      // Notifications (unread count)
+      const notifQ = query(
+        collection(db, "notifications", user.uid, "items"),
+        where("read", "==", false)
+      );
+      unsubscribers.push(onSnapshot(notifQ, (snap) => setUnreadNotifications(snap.size)));
 
-  useEffect(() => {
-  const user = auth.currentUser;
-  if (!user) return;
+      // Chats
+      const chatQ = query(collection(db, "chats"), where("members", "array-contains", user.uid));
+      unsubscribers.push(
+        onSnapshot(chatQ, (snap) => {
+          let unread = 0;
+          snap.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.lastSenderId !== user.uid && data.lastMessageStatus !== "read") unread++;
+          });
+          setUnreadChats(unread);
+        })
+      );
 
-  const q = query(collection(db, "chats"), where("members", "array-contains", user.uid));
+      // User Role
+      const userRef = doc(db, "users", user.uid);
+      unsubscribers.push(
+        onSnapshot(userRef, (snap) => {
+          if (!snap.exists()) return;
+          const role = snap.data().userType || "Store Owner";
+          setUserRole(role);
+        })
+      );
 
-  const unsub = onSnapshot(q, (snap) => {
-    let unread = 0;
+      // Saved Posts
+      const savedRef = collection(db, "saved_posts", user.uid, "posts");
+      unsubscribers.push(
+        onSnapshot(savedRef, (snap) => {
+          const savedIds: string[] = [];
+          snap.forEach((d) => savedIds.push(d.data().postId));
+          setSavedPosts(savedIds);
+        })
+      );
 
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      const lastSender = data.lastSenderId;
-      const lastStatus = data.lastMessageStatus;
+      // Verification Status
+      const verRef = doc(db, "user_verifications", user.uid);
+      unsubscribers.push(
+        onSnapshot(verRef, (snap) => {
+          if (snap.exists()) setVerification(snap.data().status);
+          else setVerification(null);
+        })
+      );
+    } catch (error) {
+      console.error("Dashboard listener setup failed:", error);
+    }
 
-      // Count as unread if the last message was NOT sent by me and NOT read yet
-      if (lastSender !== user.uid && lastStatus !== "read") {
-        unread++;
-      }
-    });
-
-    setUnreadChats(unread);
-  });
-
-  return () => unsub();
-}, []);
-
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const ref = doc(db, "users", user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) return;
-      const role = snap.data().userType || "Store Owner";
-      setUserRole(role);
-    });
-
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    if (!userRole) return;
-
-    const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const allItems: any[] = [];
-      snap.forEach((doc) => allItems.push({ id: doc.id, ...doc.data() }));
-
-      const currentUid = auth.currentUser?.uid;
-      const role = (userRole || "").toLowerCase().trim();
-
-      // Define allowed visibility per role
-      const visibilityMap: Record<string, Set<string>> = {
-        "store owner": new Set(["store owner", "consumer", "farmer"]),
-        "farmer": new Set(["farmer", "store owner"]),
-        "consumer": new Set(["consumer", "store owner"]),
-      };
-
-      const allowed = visibilityMap[role] ?? new Set();
-
-      // Filter posts: allowed category + not user's own
-      const visiblePosts = allItems.filter((p) => {
-        const type = (p.userType || "").toLowerCase().trim();
-        return allowed.has(type) && p.userId !== currentUid;
-      });
-
-      setProducts(visiblePosts);
-      setFiltered(visiblePosts);
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, [userRole]);
+    return () => {
+      console.log(" Cleaning up dashboard Firestore listeners...");
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  }, [isFocused]);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+    if (!isFocused || !userRole) return; // Only run while dashboard visible
+    console.log(" Dashboard: product listener active for role:", userRole);
 
-    const ref = collection(db, "saved_posts", user.uid, "posts");
-    const unsub = onSnapshot(ref, (snap) => {
-      const savedIds: string[] = [];
-      snap.forEach((d) => savedIds.push(d.data().postId));
-      setSavedPosts(savedIds);
-    });
+    let isMounted = true;
+    let unsub: (() => void) | null = null;
 
-    return () => unsub();
-  }, []);
+    const timer = setTimeout(() => {
+      const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          if (!isMounted) return;
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+          const allItems = snap.docs.map((doc) => ({
+            id: doc.id,
+            ...(doc.data() as any),
+          }));
+          const currentUid = auth.currentUser?.uid;
+          const role = (userRole || "").toLowerCase().trim();
 
-    const unsub = onSnapshot(doc(db, "user_verifications", user.uid), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setVerification(data.status);
-      } else {
-        setVerification(null);
-      }
-    });
+          const visibilityMap: Record<string, Set<string>> = {
+            "store owner": new Set(["store owner", "consumer", "farmer"]),
+            farmer: new Set(["farmer", "store owner"]),
+            consumer: new Set(["consumer", "store owner"]),
+          };
 
-    return () => unsub();
-  }, []);
+          const allowed = visibilityMap[role] ?? new Set();
+          const visiblePosts = allItems.filter((p) => {
+            const type = (p.userType || "").toLowerCase().trim();
+            return allowed.has(type) && p.userId !== currentUid;
+          });
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+          setProducts(visiblePosts);
+          setFiltered(visiblePosts);
+          setLoading(false);
+        },
+        (error) => {
+          console.error("Firestore products listener error:", error);
+        }
+      );
+    }, 250);
+
+    return () => {
+      console.log(" Cleaning up product listener...");
+      isMounted = false;
+      clearTimeout(timer);
+      if (unsub) unsub();
+    };
+  }, [isFocused, userRole]);
 
   const canInteractWith = (targetUserType: string): boolean => {
     const target = (targetUserType || "").toLowerCase();
@@ -668,7 +667,7 @@ export default function DashboardScreen() {
         />
       </View>
 
-      <View style={[styles.addButtonContainer, { bottom: 20 + insets.bottom, }]}>
+      <View style={styles.addButtonContainerFixed}>
         <TouchableOpacity
           style={[
             styles.addButton,
@@ -1046,6 +1045,17 @@ alertBox: {
   textDecorationLine: "underline",
   fontWeight: "600",
   fontSize: 18,
+},addButtonContainerFixed: {
+  position: "absolute",
+  bottom: 55,              
+  left: 0,
+  right: 0,
+  paddingHorizontal: 20,
+  paddingVertical: 10,     
+  backgroundColor: "#fff",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 999,             
+  elevation: 6,            
 },
-
 });

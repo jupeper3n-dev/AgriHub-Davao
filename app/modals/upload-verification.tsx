@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useState } from "react";
@@ -26,21 +27,29 @@ export default function UploadVerification() {
 
   // Load user info and verification status
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
+    let unsubAuth: (() => void) | null = null;
 
-      // Get verification status
+    unsubAuth = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        console.log("No user authenticated yet, waiting...");
+        return;
+      }
+
+      console.log("✅ User restored:", user.uid);
+
+      // Fetch Firestore data safely
       const verificationSnap = await getDoc(doc(db, "user_verifications", user.uid));
       if (verificationSnap.exists()) setStatus(verificationSnap.data().status);
 
-      // Get role
       const userSnap = await getDoc(doc(db, "users", user.uid));
       if (userSnap.exists()) {
         setUserRole((userSnap.data().userType || "consumer").toLowerCase());
       }
+    });
+
+    return () => {
+      if (unsubAuth) unsubAuth();
     };
-    fetchUserInfo();
   }, []);
 
   const pickImage = async (setImage: (uri: string) => void) => {

@@ -38,6 +38,7 @@ export default function CommentsModal() {
   const [comments, setComments] = useState<any[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const isSendingRef = React.useRef(false);
   const [replyTo, setReplyTo] = useState<any | null>(null);
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({});
   const [postOwnerId, setPostOwnerId] = useState<string | null>(null);
@@ -127,6 +128,17 @@ export default function CommentsModal() {
   };
 
   useEffect(() => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        console.log(" Auth restored for comments modal:", user.uid);
+      } else {
+        console.log(" No user logged in");
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     if (!productId) return;
 
     const fetchPostInfo = async () => {
@@ -146,36 +158,50 @@ export default function CommentsModal() {
   }, [productId]);
 
 
-  // Load all comments
   useEffect(() => {
     if (!productId) return;
+
+    let isMounted = true;
 
     const q = query(
       collection(db, "products", String(productId), "comments"),
       orderBy("createdAt", "asc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const list: any[] = [];
-      snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
-      setComments(list);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!isMounted) return; // ignore after unmount
+        const list: any[] = [];
+        snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+        setComments(list);
+        setLoading(false);
+      },
+      (error) => {
+        console.error(" Comment listener error:", error);
+        setLoading(false);
+      }
+    );
 
-    return () => unsub();
+    return () => {
+      console.log(" Cleaning up comment listener...");
+      isMounted = false;
+      unsub();
+    };
   }, [productId]);
-
-  // Post comment or reply
   const handleSend = async () => {
     const user = auth.currentUser;
     if (!user) return Alert.alert("Please log in first.");
-    if (isSending) return;
-    if (!newComment.trim() && !commentImage) return; // must have text or an image
+    if (isSendingRef.current) return; // immediate lock
+    if (!newComment.trim() && !commentImage) return;
+
+    isSendingRef.current = true;
+    setIsSending(true);
+
 
     try {
       setUploading(true);
 
-      // 1) Resolve commenter identity
       const userSnap = await getDoc(doc(db, "users", user.uid));
       const userData = userSnap.exists() ? userSnap.data() : {};
       const userName = (userData as any).fullName || user.email;
@@ -188,17 +214,13 @@ export default function CommentsModal() {
       if (commentImage) {
         const res = await fetch(commentImage);
         const blob = await res.blob();
-
-        const imgRef = ref(
-          storage,
-          `comments/${productId}/${Date.now()}_${user.uid}.jpg`
-        );
+        const imgRef = ref(storage, `comments/${productId}/${Date.now()}_${user.uid}.jpg`);
         await uploadBytes(imgRef, blob);
         imageUrl = await getDownloadURL(imgRef);
       }
 
       const newCommentData = {
-        id: Date.now().toString(), // temporary local id
+        id: Date.now().toString(),
         userId: user.uid,
         userName,
         userPhoto: photoURL,
@@ -206,16 +228,14 @@ export default function CommentsModal() {
         imageUrl,
         likes: [],
         parentId: replyTo ? replyTo.id : null,
-        createdAt: new Date(), // temporary timestamp for local display
+        createdAt: new Date(),
       };
 
-      // Optimistic UI update
       setComments((prev) => [...prev, newCommentData]);
 
-      // Then push to Firestore
       await addDoc(collection(db, "products", String(productId), "comments"), {
         ...newCommentData,
-        createdAt: serverTimestamp(), // replace with server time
+        createdAt: serverTimestamp(),
       });
 
       try {
@@ -254,16 +274,20 @@ export default function CommentsModal() {
         console.error("Notification error:", notifErr);
       }
 
-      // 5) Reset input UI
       setNewComment("");
-      setCommentImage?.(null); // make sure you have const [commentImage, setCommentImage] = useState<string|null>(null)
+      setCommentImage(null);
       setReplyTo(null);
+
     } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", "Failed to post comment.");
+      console.error("Comment post failed:", err);
+      Alert.alert("Error", err?.message || "Unable to post comment.");
     } finally {
       setUploading(false);
-      setIsSending(false);
+
+      setTimeout(() => {
+        isSendingRef.current = false;
+        setIsSending(false);
+      }, 1200);
     }
   };
 
@@ -506,14 +530,15 @@ export default function CommentsModal() {
               />
 
               <TouchableOpacity
-                style={[
-                  styles.sendBtn,
-                  (!newComment.trim() && !commentImage) && { opacity: 0.6 },
-                ]}
+                style={[styles.sendBtn, (isSending || (!newComment.trim() && !commentImage)) && { opacity: 0.6 }]}
                 onPress={handleSend}
-                disabled={!newComment.trim() && !commentImage}
+                disabled={isSending || (!newComment.trim() && !commentImage)}
               >
-                <Ionicons name="send" size={20} color="#fff" />
+                {isSending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#fff" />
+                )}
               </TouchableOpacity>
             </View>
           </View>

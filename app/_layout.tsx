@@ -10,6 +10,7 @@ import "react-native-reanimated";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../firebaseConfig";
 import { setupPresence } from "../lib/presenceTracker";
+import { waitForAuth } from "../lib/waitForAuth";
 
 
 export default function RootLayout() {
@@ -30,15 +31,33 @@ export default function RootLayout() {
 
   // Monitor auth session
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    let unsub: (() => void) | null = null;
+
+    const initAuthListener = async () => {
+      const user = await waitForAuth(); // wait until Firebase restores session
       if (user) {
-        console.log("User session active:", user.email);
+        console.log(" Restored session for:", user.email);
       } else {
-        console.log("Session expired — redirecting to login");
+        console.log(" No session found, routing to login");
         router.replace("/login" as any);
       }
-    });
-    return () => unsubscribe();
+
+      // now attach real-time listener (for sign-out / refresh)
+      unsub = onAuthStateChanged(auth, (u) => {
+        if (u) {
+          console.log("User active:", u.email);
+        } else {
+          console.log("Session expired — redirecting to login");
+          router.replace("/login" as any);
+        }
+      });
+    };
+
+    initAuthListener();
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // Periodically refresh Firebase Auth token every 30 minutes

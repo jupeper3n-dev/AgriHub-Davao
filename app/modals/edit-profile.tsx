@@ -57,31 +57,46 @@ export default function EditProfile() {
   });
 
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (snap.exists()) {
-          const d = snap.data();
-          setForm({
-            fullName: d.fullName || "",
-            email: d.email || user.email || "",
-            address: d.address || "",
-            password: "",
-            photoURL: d.photoURL || "",
-            crops: d.crops || [],
-          });
-          setUserType(d.userType || "");
-        }
-      } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "Failed to load profile");
-      } finally {
-        setLoading(false);
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        console.log("✅ Auth restored for EditProfile:", user.uid);
+        // Re-run your profile load logic safely
+        loadProfile();
+      } else {
+        console.log("🚫 No user logged in");
       }
-    };
-    loadProfile();
+    });
+
+    return () => unsub();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        setForm({
+          fullName: d.fullName || "",
+          email: d.email || user.email || "",
+          address: d.address || "",
+          password: "",
+          photoURL: d.photoURL || "",
+          crops: d.crops || [],
+        });
+        setUserType(d.userType || "");
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Failed to load profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile(); // run once on mount too
   }, []);
 
   const pickImage = async () => {

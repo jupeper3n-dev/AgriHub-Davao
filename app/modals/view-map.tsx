@@ -1,3 +1,4 @@
+import { ORS_API_KEY } from "@env";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -10,9 +11,6 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-
-const ORS_API_KEY =
-  "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM2YWQxMjI0YmM2ZDQ4MTNiYWQ3MjdkMGRjMTk1NDZjIiwiaCI6Im11cm11cjY0In0="; // Replace with your ORS key
 
 export default function ViewMapModal() {
   const { lat, lng, locationName } = useLocalSearchParams();
